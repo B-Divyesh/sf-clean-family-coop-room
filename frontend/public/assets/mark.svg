@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" role="img" aria-labelledby="title">
+  <title id="title">Two windows joined by a signal</title>
+  <path fill="#ffd166" d="M2 8h20v20H2zM42 8h20v20H42zM18 24h8v4h12v-4h8v8h-8v4H26v-4h-8z"/>
+  <path fill="#07131d" d="M7 13h10v10H7zM47 13h10v10H47z"/>
+  <path fill="#69e3b2" d="M9 15h6v6H9z"/><path fill="#70c6e8" d="M49 15h6v6h-6z"/>
+</svg>

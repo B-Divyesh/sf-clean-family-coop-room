@@ -1,0 +1,12 @@
+{
+  "name": "Together Room",
+  "short_name": "Together",
+  "description": "A calm 10-minute remote co-op for two family members.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07131d",
+  "theme_color": "#07131d",
+  "icons": [
+    { "src": "/assets/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
