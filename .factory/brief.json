@@ -1,0 +1,11 @@
+{
+  "slug": "clean-family-coop-room",
+  "title": "Together Room",
+  "territory": "games-creative",
+  "user": "A parent and child who want a 10-minute remote co-op activity without ads, logins, tracking, or an ongoing game-service commitment.",
+  "smallest_useful_product": "A two-device PWA with three original, turn-based co-op microgames, six-digit room codes, reconnect support, and no account.",
+  "success_measure": "50% of created rooms complete two rounds with both devices still connected after 10 minutes.",
+  "artifact_class": "web-with-backend",
+  "monetization": "one-time",
+  "constraints": "No ads, analytics minimization, original game content only, safety-first room expiry, COPPA-aware product design."
+}
