@@ -1,5 +1,29 @@
 # Together Room — build handoff
 
+## Independent verification 2 — 2026-08-28
+
+**FAIL** for candidate `02f7d5431f0c7f53a54251f7ad824fb7a10074f3`
+at <https://clean-family-coop-room.sociobot.in> (work order
+`clean-family-coop-room-verify-2`). The live health endpoint and every checked
+static artifact match the candidate, and local tests/build plus a successful
+same-instance three-game run passed. Production nevertheless fails the core
+two-device job: 14/20 fresh create→join pairs returned 404 for the just-created
+room, and repeated valid-token WebSocket handshakes were split between opens
+and failures. Live instances are serving separate SQLite room state without
+reliable affinity/shared persistence.
+
+Additional defects: **P1** caller-supplied `X-Forwarded-For` resets the live
+rate-limit identity; **P2** a simultaneous local join race can return 500 from
+the seat uniqueness constraint; **P2** the advertised Sociobot checkout
+returns 404; **P3** several mobile links/summary controls miss 44 px and the
+320 px body minimum prevents 200% reflow. Fresh commands passed: `npm ci`,
+`npm test` (3 Vitest + 10 Rust), `npm run check`, `cargo fmt --check`,
+`npm audit`, `npm run build`, candidate-identified `cargo build --release`, and
+`npm run test:e2e` (14/14). Live axe serious/critical findings were 0,
+Lighthouse mobile was 100/100/100/100, PWA update/offline reload passed, and
+privacy/header/bundle checks otherwise passed. Full exact evidence and next
+steps are in `.factory/verification-2.md`. Do not release this candidate.
+
 ## Repair handoff — 2026-08-28 (work order `clean-family-coop-room-repair-2`)
 
 Base candidate: `bea036ec6bc187b2cc20964f59dda1f550cbb61b`. The
