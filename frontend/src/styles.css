@@ -22,7 +22,6 @@
 html { background: var(--ink); scroll-behavior: smooth; }
 
 body {
-  min-width: 320px;
   min-height: 100vh;
   margin: 0;
   color: var(--paper);
@@ -81,7 +80,7 @@ button:disabled { opacity: .48; cursor: not-allowed; transform: none; }
 
 .site-header, .site-footer, main { width: min(1160px, calc(100% - 32px)); margin-inline: auto; }
 .site-header { display: flex; align-items: center; justify-content: space-between; min-height: 78px; padding-block: 12px; }
-.brand { display: inline-flex; align-items: center; gap: 12px; color: var(--paper); font-family: "Courier New", monospace; font-size: 1.05rem; font-weight: 800; letter-spacing: .04em; text-decoration: none; }
+.brand { display: inline-flex; min-height: 44px; align-items: center; gap: 12px; color: var(--paper); font-family: "Courier New", monospace; font-size: 1.05rem; font-weight: 800; letter-spacing: .04em; text-decoration: none; }
 .brand img { width: 52px; height: 32px; image-rendering: pixelated; }
 .header-tools { display: flex; align-items: center; gap: 12px; }
 .privacy-chip { color: var(--muted); font-family: "Courier New", monospace; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
@@ -90,10 +89,12 @@ button:disabled { opacity: .48; cursor: not-allowed; transform: none; }
 main { min-height: calc(100vh - 190px); padding-block: 36px 64px; }
 .site-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; border-top: 1px solid var(--line); padding: 24px 0 calc(24px + env(safe-area-inset-bottom)); color: var(--muted); font-size: .9rem; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 20px; }
+.footer-links a, .pack .tiny a { display: inline-flex; min-height: 44px; align-items: center; }
 
 h1, h2, h3, .eyebrow, .room-code, .score, .game-label { font-family: "Courier New", Courier, monospace; }
 h1 { max-width: 15ch; margin: 12px 0 18px; font-size: clamp(2.3rem, 7vw, 4.3rem); line-height: .98; letter-spacing: -.055em; }
 h2 { margin: 0 0 16px; font-size: clamp(1.55rem, 4vw, 2.2rem); line-height: 1.12; }
+h1, h2 { overflow-wrap: anywhere; }
 h3 { margin: 0 0 8px; font-size: 1.15rem; }
 p { max-width: 68ch; }
 .eyebrow { margin: 0; color: var(--mint); font-size: .78rem; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
@@ -128,12 +129,14 @@ label { display: block; margin-bottom: 8px; font-weight: 800; }
 .tape-step p { margin: 3px 0 0; color: var(--muted); }
 
 .promise { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; padding-block: 56px; }
+.promise > * { min-width: 0; }
 .plain-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .plain-list li::before { margin-right: 10px; color: var(--mint); content: "□"; font-family: monospace; }
 .pack { border: 2px solid var(--signal); padding: 24px; background: rgba(255,209,102,.055); box-shadow: 8px 8px 0 #03090d; }
 .pack-price { margin: 8px 0 18px; color: var(--signal); font: 800 1.25rem "Courier New", monospace; }
 .pack-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .restore { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 16px; }
+.restore summary { display: flex; min-height: 44px; align-items: center; cursor: pointer; }
 
 .status-banner { position: sticky; top: 8px; z-index: 10; display: flex; align-items: center; justify-content: center; gap: 10px; width: min(720px, calc(100% - 24px)); margin: 0 auto; border: 2px solid var(--coral); padding: 10px 14px; color: var(--paper); background: #3d211f; box-shadow: 0 4px 0 #03090d; }
 .status-banner[hidden] { display: none; }
@@ -260,6 +263,21 @@ label { display: block; margin-bottom: 8px; font-weight: 800; }
   .symbol-button { min-width: 54px; padding-inline: 12px; }
   .room-intro { align-items: start; flex-direction: column; }
   .site-footer { align-items: flex-start; flex-direction: column; }
+}
+
+@media (max-width: 260px) {
+  .site-header { align-items: flex-start; flex-direction: column; }
+  .brand { gap: 8px; font-size: .92rem; }
+  .brand img { width: 44px; height: auto; }
+  .art-caption, .connection-pair { flex-direction: column; }
+  .room-topbar { grid-template-columns: 1fr; }
+  .room-topbar .connection-pair { grid-column: 1; grid-row: auto; }
+  .room-code small { text-align: left; }
+  .clue-strip { grid-template-columns: repeat(3, 1fr); }
+  .tape { grid-template-columns: minmax(0, 1fr); }
+  .tape-step { grid-template-columns: 32px minmax(0, 1fr); padding-inline: 8px; }
+  .promise { grid-template-columns: minmax(0, 1fr); }
+  .pack { padding: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

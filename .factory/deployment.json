@@ -1,0 +1,19 @@
+{
+  "artifact": "container",
+  "port": 8080,
+  "scale": {
+    "minReplicas": 1,
+    "maxReplicas": 1
+  },
+  "state": {
+    "kind": "AzureFile",
+    "mountPath": "/data",
+    "persistent": true,
+    "storageName": "together-room-data",
+    "shareName": "sf-clean-family-coop-room-data"
+  },
+  "environment": {
+    "SQLITE_JOURNAL_MODE": "delete"
+  },
+  "reason": "Together Room is a single-tenant SQLite service. One durable replica keeps room, reconnect-token, game, WebSocket, presence, and in-memory rate-limit ownership coherent."
+}

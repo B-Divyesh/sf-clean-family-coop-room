@@ -1,16 +1,26 @@
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use std::{str::FromStr, time::Duration};
+
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+    SqlitePool,
+};
 
 pub async fn connect(url: &str) -> Result<SqlitePool, sqlx::Error> {
     let max_connections = if url.contains("mode=memory") { 1 } else { 5 };
+    // WAL is fast on a local disk. The production deployment may select DELETE
+    // for its single-replica Azure Files mount, where WAL shared memory is not
+    // supported. This is an optional override; a bare container still starts.
+    let journal_mode = match std::env::var("SQLITE_JOURNAL_MODE").as_deref() {
+        Ok("delete") => SqliteJournalMode::Delete,
+        _ => SqliteJournalMode::Wal,
+    };
+    let options = SqliteConnectOptions::from_str(url)?
+        .busy_timeout(Duration::from_secs(5))
+        .foreign_keys(true)
+        .journal_mode(journal_mode);
     let pool = SqlitePoolOptions::new()
         .max_connections(max_connections)
-        .connect(url)
-        .await?;
-    sqlx::query("PRAGMA journal_mode = WAL")
-        .execute(&pool)
-        .await?;
-    sqlx::query("PRAGMA foreign_keys = ON")
-        .execute(&pool)
+        .connect_with(options)
         .await?;
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS rooms (

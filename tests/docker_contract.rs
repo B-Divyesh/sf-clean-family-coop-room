@@ -1,6 +1,7 @@
 const DOCKERFILE: &str = include_str!("../Dockerfile");
 const BUILD_SCRIPT: &str = include_str!("../build.rs");
 const DOCKERIGNORE: &str = include_str!("../.dockerignore");
+const DEPLOYMENT: &str = include_str!("../.factory/deployment.json");
 
 #[test]
 fn container_build_does_not_require_repository_metadata() {
@@ -37,4 +38,20 @@ fn build_sha_is_baked_into_backend_and_runtime_identity() {
     assert!(runtime.contains("ARG BUILD_SHA"));
     assert!(runtime.contains("org.opencontainers.image.revision=${BUILD_SHA}"));
     assert!(runtime.contains("BUILD_SHA=${BUILD_SHA}"));
+}
+
+#[test]
+fn sqlite_deployment_is_single_replica_and_durably_mounted() {
+    let deployment: serde_json::Value = serde_json::from_str(DEPLOYMENT).unwrap();
+    assert_eq!(deployment["artifact"], "container");
+    assert_eq!(deployment["port"], 8080);
+    assert_eq!(deployment["scale"]["minReplicas"], 1);
+    assert_eq!(deployment["scale"]["maxReplicas"], 1);
+    assert_eq!(deployment["state"]["mountPath"], "/data");
+    assert_eq!(deployment["state"]["persistent"], true);
+    assert_eq!(
+        deployment["state"]["shareName"],
+        "sf-clean-family-coop-room-data"
+    );
+    assert_eq!(deployment["environment"]["SQLITE_JOURNAL_MODE"], "delete");
 }

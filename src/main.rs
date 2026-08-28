@@ -209,6 +209,17 @@ mod tests {
             .unwrap()
     }
 
+    fn forwarded_request(method: Method, path: &str, spoofed: &str) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(path)
+            // The trusted edge appends the network-observed address. A caller can
+            // control only the prefix and must not gain a new limiter bucket.
+            .header("x-forwarded-for", format!("{spoofed}, 203.0.113.40"))
+            .body(Body::empty())
+            .unwrap()
+    }
+
     #[tokio::test]
     async fn room_create_join_and_socket_attempts_are_rate_limited_per_client() {
         for (method, path, attempts) in [
@@ -289,8 +300,69 @@ mod tests {
         let trusted = untrusted.with_trusted_proxy_headers(true);
         assert_eq!(
             trusted.client_identity(request.headers(), request.extensions()),
-            "198.51.100.7"
+            "10.0.0.2"
         );
+    }
+
+    #[tokio::test]
+    async fn caller_supplied_forwarded_prefix_cannot_reset_a_trusted_proxy_bucket() {
+        let state = AppState::new(db::connect("sqlite::memory:?cache=shared").await.unwrap())
+            .with_trusted_proxy_headers(true);
+        for spoofed in ["198.51.100.7", "198.51.100.8"] {
+            let request = Request::builder()
+                .header("x-forwarded-for", format!("{spoofed}, 203.0.113.40"))
+                .body(Body::empty())
+                .unwrap();
+            assert_eq!(
+                state.client_identity(request.headers(), request.extensions()),
+                "203.0.113.40"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn forwarded_prefix_rotation_cannot_bypass_any_room_rate_limit() {
+        for (method, path, attempts) in [
+            (Method::POST, "/api/rooms", routes::CREATE_ROOM_LIMIT),
+            (
+                Method::POST,
+                "/api/rooms/000000/join",
+                routes::JOIN_ROOM_LIMIT,
+            ),
+            (
+                Method::GET,
+                "/api/rooms/000000/socket",
+                routes::SOCKET_UPGRADE_LIMIT,
+            ),
+        ] {
+            let name: u64 = rand::rng().random();
+            let pool = db::connect(&format!(
+                "sqlite://forwarded-limit-{name}?mode=memory&cache=shared"
+            ))
+            .await
+            .unwrap();
+            let app = build_app(
+                AppState::new(pool).with_trusted_proxy_headers(true),
+                PathBuf::from("dist"),
+            );
+            for attempt in 0..attempts {
+                let response = app
+                    .clone()
+                    .oneshot(forwarded_request(
+                        method.clone(),
+                        path,
+                        &format!("198.51.100.{}", attempt + 1),
+                    ))
+                    .await
+                    .unwrap();
+                assert_ne!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+            }
+            let response = app
+                .oneshot(forwarded_request(method, path, "198.51.100.250"))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        }
     }
 
     #[tokio::test]

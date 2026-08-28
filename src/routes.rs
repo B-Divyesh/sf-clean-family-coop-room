@@ -92,7 +92,10 @@ impl AppState {
             if let Some(ip) = headers
                 .get("x-forwarded-for")
                 .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.split(',').next())
+                // The trusted ingress appends the network-observed client to the
+                // right. Values supplied by a caller therefore remain to its left
+                // and must never choose the rate-limit bucket.
+                .and_then(|value| value.split(',').next_back())
                 .map(str::trim)
                 .and_then(|value| value.parse::<IpAddr>().ok())
             {
@@ -231,17 +234,32 @@ async fn join_room(
 ) -> Result<Json<JoinResponse>, ApiError> {
     let code = normalize_code(&raw_code)?;
     let now = now();
+    let token = fresh_token();
+    // Claim seat 1 in one statement. INSERT OR IGNORE turns the uniqueness
+    // loser of a simultaneous join into the documented room-full response.
+    let inserted = sqlx::query(
+        "INSERT OR IGNORE INTO participants(room_code, seat, token_hash, last_seen)
+         SELECT code, 1, ?, ? FROM rooms WHERE code = ? AND expires_at > ?",
+    )
+    .bind(token_hash(&token))
+    .bind(now)
+    .bind(&code)
+    .bind(now)
+    .execute(&state.pool)
+    .await
+    .map_err(internal)?
+    .rows_affected();
     let room = sqlx::query("SELECT expires_at FROM rooms WHERE code = ?")
         .bind(&code)
         .fetch_optional(&state.pool)
         .await
-        .map_err(internal)?
-        .ok_or_else(|| {
-            ApiError(
-                StatusCode::NOT_FOUND,
-                "That room was not found. Check the six digits or ask for a new room.".into(),
-            )
-        })?;
+        .map_err(internal)?;
+    let Some(room) = room else {
+        return Err(ApiError(
+            StatusCode::NOT_FOUND,
+            "That room was not found. Check the six digits or ask for a new room.".into(),
+        ));
+    };
     let expires_at: i64 = room.get("expires_at");
     if expires_at <= now {
         return Err(ApiError(
@@ -249,24 +267,9 @@ async fn join_room(
             "That room has safely expired. Create a fresh room to keep playing.".into(),
         ));
     }
-    let occupied: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM participants WHERE room_code = ?")
-        .bind(&code)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(internal)?;
-    if occupied >= 2 {
+    if inserted == 0 {
         return Err(ApiError(StatusCode::CONFLICT, "Both windows in that room are already claimed. Reopen the original invite on this device.".into()));
     }
-    let token = fresh_token();
-    sqlx::query(
-        "INSERT INTO participants(room_code, seat, token_hash, last_seen) VALUES(?, 1, ?, ?)",
-    )
-    .bind(&code)
-    .bind(token_hash(&token))
-    .bind(now)
-    .execute(&state.pool)
-    .await
-    .map_err(internal)?;
     Ok(Json(JoinResponse {
         code,
         token,
@@ -524,5 +527,39 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(third.0, StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn simultaneous_joins_atomically_claim_one_seat_and_never_return_internal_error() {
+        let name: u64 = rand::rng().random();
+        let pool = db::connect(&format!(
+            "sqlite://join-race-{name}?mode=memory&cache=shared"
+        ))
+        .await
+        .unwrap();
+        let state = AppState::new(pool);
+        let Json(created) = create_room(State(state.clone())).await.unwrap();
+        let barrier = Arc::new(tokio::sync::Barrier::new(20));
+        let mut joins = Vec::new();
+        for _ in 0..20 {
+            let state = state.clone();
+            let code = created.code.clone();
+            let barrier = barrier.clone();
+            joins.push(tokio::spawn(async move {
+                barrier.wait().await;
+                join_room(Path(code), State(state)).await
+            }));
+        }
+        let mut accepted = 0;
+        let mut conflicts = 0;
+        for result in futures_util::future::join_all(joins).await {
+            match result.unwrap() {
+                Ok(_) => accepted += 1,
+                Err(ApiError(StatusCode::CONFLICT, _)) => conflicts += 1,
+                Err(error) => panic!("unexpected join response: {error:?}"),
+            }
+        }
+        assert_eq!(accepted, 1);
+        assert_eq!(conflicts, 19);
     }
 }

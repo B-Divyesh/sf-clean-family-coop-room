@@ -41,7 +41,8 @@ The backend accepts these environment variables:
 | `DATABASE_URL` | `sqlite://together-room.db?mode=rwc` | SQLite connection |
 | `FRONTEND_DIR` | `dist` | built assets to serve |
 | `BUILD_SHA` | `dev` | Build identity compiled into `/health` (the factory supplies the immutable source SHA) |
-| `TRUST_PROXY_HEADERS` | unset | Set to `1` only behind the deployment proxy so rate limits use its client IP header |
+| `TRUST_PROXY_HEADERS` | unset | Set to `1` only behind an appending trusted proxy; the rightmost observed client address is used |
+| `SQLITE_JOURNAL_MODE` | `wal` | Set to `delete` on the production Azure Files mount |
 | `RUST_LOG` | info filters | structured log level |
 
 ## Build and verify
@@ -54,6 +55,11 @@ npm run test:e2e     # Chromium desktop + 390 px mobile, axe included
 docker build --build-arg BUILD_SHA="$(git rev-parse HEAD)" -t together-room .
 docker run --rm -p 8080:8080 -v together-data:/data together-room
 ```
+
+Production topology is part of the product contract in
+`.factory/deployment.json`: SQLite runs on exactly one replica with `/data` on
+durable storage. Do not raise the replica maximum without first moving room,
+presence, WebSocket, and rate-limit state to shared services.
 
 Playwright is pinned to `1.58.2`. Its browser should already be present in the factory image; elsewhere run `npx playwright install chromium` once.
 

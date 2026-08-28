@@ -42,6 +42,27 @@ test('keyboard focus starts on the visible skip link', async ({ page }) => {
   await expect(skip).toHaveCSS('outline-width', '3px');
 });
 
+test('mobile links and disclosure meet touch targets and 200% reflow', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'mobile', 'mobile geometry regression');
+  await page.goto('/');
+  const targets = [
+    page.getByRole('link', { name: 'Together Room' }),
+    page.getByText('Have a license? Restore it'),
+    page.locator('.pack').getByRole('link', { name: 'terms' }),
+    page.locator('.pack').getByRole('link', { name: 'privacy' }),
+    page.locator('.site-footer').getByRole('link', { name: 'Privacy' }),
+    page.locator('.site-footer').getByRole('link', { name: 'Terms' })
+  ];
+  for (const target of targets) {
+    const box = await target.boundingBox();
+    expect(box?.height, await target.textContent() ?? 'target').toBeGreaterThanOrEqual(44);
+  }
+
+  await page.setViewportSize({ width: 195, height: 844 });
+  expect(await page.evaluate(() => ({ client: document.documentElement.clientWidth, scroll: document.documentElement.scrollWidth })))
+    .toEqual({ client: 195, scroll: 195 });
+});
+
 test('the installed shell updates cleanly and reloads offline', async ({ page, context }) => {
   await page.goto('/');
   await page.evaluate(() => navigator.serviceWorker.ready);
