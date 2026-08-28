@@ -16,6 +16,9 @@ deployment class are unchanged.
   production Container App has that exact scale, environment, mount, and
   volume configuration. A room created before an active-revision restart was
   joined afterward with HTTP 200, proving durable state survives replacement.
+  Network-filesystem mode uses one database connection and bounded retries for
+  transient locks during replacement; a regression opens two replacement
+  pools concurrently against the same `DELETE`-journal database.
 - **Caller-controlled rate-limit identity:** a trusted appending proxy now
   selects the rightmost valid `X-Forwarded-For` address, so caller-controlled
   prefixes cannot select buckets. Regression coverage rotates a different
@@ -41,7 +44,7 @@ deployment class are unchanged.
 
 - `npm ci` installed 59 packages; full and production `npm audit` both found
   0 vulnerabilities. `cargo clean` removed all prior Rust artifacts.
-- `npm test`: 3/3 Vitest, 11/11 backend unit/router tests, and 3/3
+- `npm test`: 3/3 Vitest, 12/12 backend unit/router tests, and 3/3
   container/deployment contract tests passed. `npm run check`,
   `cargo fmt --all -- --check`, and `git diff --check` passed.
 - `npm run build` produced `dist/`: initial JavaScript 22.44 kB (8.71 kB
