@@ -5,7 +5,10 @@ mod routes;
 use std::{env, net::SocketAddr, path::PathBuf, time::Duration};
 
 use axum::{
+    extract::Request,
     http::{header, HeaderValue},
+    middleware::{self, Next},
+    response::Response,
     routing::get,
     Json, Router,
 };
@@ -74,8 +77,34 @@ fn build_app(state: AppState, frontend_dir: PathBuf) -> Router {
         .layer(SetResponseHeaderLayer::if_not_present(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer")))
         .layer(SetResponseHeaderLayer::if_not_present(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self' wss: ws: https://api.sociobot.in; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://api.sociobot.in")))
         .layer(CompressionLayer::new())
+        .layer(middleware::from_fn(cache_headers))
         .layer(CatchPanicLayer::new())
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| {
+            // Never log query strings: WebSocket reconnect keys travel in the query.
+            tracing::info_span!(
+                "http_request",
+                method = %request.method(),
+                path = %request.uri().path()
+            )
+        }))
+}
+
+async fn cache_headers(request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_owned();
+    let mut response = next.run(request).await;
+    let value = if path.starts_with("/api/") || path == "/health" {
+        "no-store"
+    } else if path.starts_with("/assets/index-") {
+        "public, max-age=31536000, immutable"
+    } else if path.starts_with("/assets/") {
+        "public, max-age=86400"
+    } else {
+        "no-cache"
+    };
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static(value));
+    response
 }
 
 async fn shutdown_signal() {

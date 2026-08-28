@@ -102,8 +102,9 @@ p { max-width: 68ch; }
 .tiny { color: var(--muted); font-size: .84rem; }
 
 .hero { display: grid; grid-template-columns: minmax(0, .85fr) minmax(420px, 1.15fr); align-items: center; gap: clamp(32px, 5vw, 72px); min-height: 560px; }
+.hero > * { min-width: 0; }
 .hero-copy { position: relative; z-index: 1; }
-.hero-art { position: relative; border: 2px solid var(--line); border-radius: 4px; background: #050d27; box-shadow: 12px 12px 0 #031018; }
+.hero-art { position: relative; margin: 0; border: 2px solid var(--line); border-radius: 4px; background: #050d27; box-shadow: 12px 12px 0 #031018; }
 .hero-art::before { position: absolute; inset: 8px; z-index: 1; border: 1px solid rgba(247,240,208,.25); content: ""; pointer-events: none; }
 .hero-art img { display: block; width: 100%; height: auto; aspect-ratio: 3/2; object-fit: cover; image-rendering: auto; }
 .art-caption { display: flex; justify-content: space-between; gap: 12px; margin: 0; border-top: 2px solid var(--line); padding: 10px 12px; color: var(--muted); background: var(--panel); font-family: "Courier New", monospace; font-size: .72rem; text-transform: uppercase; }
@@ -222,7 +223,7 @@ label { display: block; margin-bottom: 8px; font-weight: 800; }
 
 @media (max-width: 860px) {
   .hero { grid-template-columns: 1fr; min-height: auto; }
-  .hero-art { grid-row: 2; width: min(100%, 680px); }
+  .hero-art { grid-row: 2; width: 100%; max-width: 680px; min-width: 0; }
   .tape, .promise { grid-template-columns: 1fr; }
   .tape { gap: 18px; }
   .tape-step + .tape-step { border-left: 0; }

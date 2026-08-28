@@ -39,6 +39,28 @@ test('two devices join, complete a Star Signal round, and reconnect', async ({ b
   await expect(first.getByText('Window A (you): connected')).toBeVisible();
   await expect(first.getByRole('heading', { level: 1, name: 'You did it together.' })).toBeVisible();
 
+  await first.getByRole('button', { name: 'Choose another game' }).click();
+  await first.getByRole('button', { name: 'Play Patchwork Pair' }).click();
+  const patches: Array<[Page, string, number]> = [
+    [first, 'amber', 0], [second, 'sky', 1], [first, 'mint', 2],
+    [second, 'mint', 3], [first, 'amber', 4], [second, 'sky', 5],
+    [first, 'sky', 6], [second, 'mint', 7], [first, 'amber', 8]
+  ];
+  for (const [page, color, index] of patches) {
+    await page.getByRole('button', { name: color, exact: true }).click();
+    await page.locator(`[data-patch-index="${index}"]`).click();
+  }
+  await expect(second.getByRole('heading', { level: 1, name: 'You did it together.' })).toBeVisible();
+
+  await second.getByRole('button', { name: 'Choose another game' }).click();
+  await second.getByRole('button', { name: 'Play Firefly Ferry' }).click();
+  const route: Array<[Page, string]> = [
+    [first, 'Right'], [second, 'Up'], [first, 'Right'], [second, 'Up'],
+    [first, 'Right'], [second, 'Up'], [first, 'Right'], [second, 'Up']
+  ];
+  for (const [page, direction] of route) await page.getByRole('button', { name: new RegExp(direction, 'i') }).click();
+  await expect(first.getByRole('heading', { level: 1, name: 'You did it together.' })).toBeVisible();
+
   await firstContext.close();
   await secondContext.close();
 });

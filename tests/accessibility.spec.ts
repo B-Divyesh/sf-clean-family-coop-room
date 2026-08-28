@@ -21,3 +21,15 @@ test('privacy and terms are reachable without a network form', async ({ page }) 
   await expect(page).toHaveURL(/\/terms$/);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Short rooms, simple terms.');
 });
+
+test('a returned purchase license is stored, stripped from the URL, and verified', async ({ page }) => {
+  await page.route('https://api.sociobot.in/api/v1/products/**/verify?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ valid: true, reason: 'ok', expires_at: null })
+  }));
+  await page.goto('/?license=test-license-token');
+  await expect(page.getByRole('heading', { name: 'Your extra tapes are ready' })).toBeVisible();
+  await expect(page).toHaveURL('/');
+  expect(await page.evaluate(() => localStorage.getItem('sb_license:clean-family-coop-room'))).toBe('test-license-token');
+});
