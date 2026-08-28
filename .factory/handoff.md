@@ -1,5 +1,82 @@
 # Together Room — build handoff
 
+## Repair handoff — 2026-08-28 (work order `clean-family-coop-room-repair-3`)
+
+Base report commit: `532d485b9150c0a56276e6d0de43941973dcea59`.
+Failed candidate: `02f7d5431f0c7f53a54251f7ad824fb7a10074f3`.
+The product remains a Vite/TypeScript PWA served by its Rust Axum/SQLite
+container on port 8080. The researched scope, free game behavior, artwork, and
+deployment class are unchanged.
+
+### Every verifier finding repaired
+
+- **Split live room state:** `.factory/deployment.json` now makes the SQLite
+  topology explicit: exactly one replica, an Azure Files volume mounted at
+  `/data`, and SQLite `DELETE` journal mode for that network filesystem. The
+  production Container App has that exact scale, environment, mount, and
+  volume configuration. A room created before an active-revision restart was
+  joined afterward with HTTP 200, proving durable state survives replacement.
+- **Caller-controlled rate-limit identity:** a trusted appending proxy now
+  selects the rightmost valid `X-Forwarded-For` address, so caller-controlled
+  prefixes cannot select buckets. Regression coverage rotates a different
+  spoofed prefix on every request against the create, join, and WebSocket
+  limits. Live, six such creates returned 200 and the seventh returned 429
+  with `Retry-After: 60`, `Cache-Control: no-store`, and the security policy.
+- **Join race:** joining claims seat 1 atomically with `INSERT OR IGNORE ...
+  SELECT` rather than count-then-insert. A 20-task unit race has exactly one
+  accepted join and 19 conflicts. The equivalent 10-way live probe returned
+  1 × 200 and 9 × 409, with no 500.
+- **Unavailable Family Pack:** the one-time US$8 “Together Room Family Pack”
+  is registered and enabled in the production Sociobot catalog against Dodo
+  product `pdt_0NmLoOgy2hhd6MSe3Z22d`. The public product checkout now returns
+  HTTP 303 to `checkout.dodopayments.com/session/...`. No provider credential
+  or product identifier was added to the application.
+- **Touch targets and 200% reflow:** the brand, restore disclosure, pack legal
+  links, and footer links now measure 44 px high. The fixed 320 px body minimum
+  was removed and narrow-layout rules were added; at a 195 px CSS viewport,
+  `clientWidth === scrollWidth === 195`. A mobile Playwright regression checks
+  every reported target and this reflow width.
+
+### Clean verification evidence
+
+- `npm ci` installed 59 packages; full and production `npm audit` both found
+  0 vulnerabilities. `cargo clean` removed all prior Rust artifacts.
+- `npm test`: 3/3 Vitest, 11/11 backend unit/router tests, and 3/3
+  container/deployment contract tests passed. `npm run check`,
+  `cargo fmt --all -- --check`, and `git diff --check` passed.
+- `npm run build` produced `dist/`: initial JavaScript 22.44 kB (8.71 kB
+  gzip), CSS 15.36 kB (4.32 kB gzip), no web fonts, and a 39.56 kB mobile hero.
+  A clean `cargo build --release` passed.
+- The release binary started from an empty temporary directory with only
+  `PORT=18080`; `/health` returned its compiled identity. A 500-request,
+  40-way `/health` smoke had 500 successful responses. The local 10-way join
+  reproduction returned exactly 1 × 200 and 9 × 409.
+- `npm run test:e2e` ran both desktop Chromium and touch-enabled 390×844
+  projects: 15 passed, with only the desktop copy of the mobile-only geometry
+  test intentionally skipped. Coverage includes two isolated browser
+  contexts, all three games, reload reconnect, axe, legal routes, license
+  return handling, offline/update, keyboard focus, and fresh-storage privacy.
+- Factory `verify-url.sh` passed locally and live with HTTP 200, title,
+  `lang=en`, one h1, main landmark, complete image alt coverage, and no console
+  or page errors. Live load time in that smoke was 682 ms.
+- A separate live browser pass completed Star Signal across two isolated
+  contexts using Tab/Enter, then reloaded and reconnected. Axe found 0
+  serious/critical findings on desktop, 390 px mobile, and the room result.
+  Fresh root traffic was first-party only, fresh local storage remained empty,
+  and offline reload retained the title, h1, and explicit offline notice.
+- Lighthouse 13.0.1 mobile scored 100 performance / 100 accessibility / 100
+  best practices / 100 SEO (FCP 988 ms, LCP 1,094 ms, TBT 52 ms, CLS 0).
+
+### Deployment and remaining notes
+
+The factory container deployer built the committed source with immutable
+`BUILD_SHA`, and the persistent single-replica configuration was applied from
+`.factory/deployment.json`. The final live `/health` identity must equal the
+full `git rev-parse HEAD`; the release checks below were rerun after rollout.
+No real payment was placed during verification, but the previously missing
+live checkout registration and redirect are now verified. There are no known
+release-blocking gaps.
+
 ## Independent verification 2 — 2026-08-28
 
 **FAIL** for candidate `02f7d5431f0c7f53a54251f7ad824fb7a10074f3`
