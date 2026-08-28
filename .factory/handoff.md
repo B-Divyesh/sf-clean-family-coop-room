@@ -52,13 +52,34 @@ artifact remains a Vite frontend served by the Axum/SQLite container on port
   Registry config inspection confirmed the sentinel in the OCI revision label
   and runtime `BUILD_SHA`, user `together`, and exposed port `8080/tcp`.
 
-### Remaining factory step
+### Deployment and live verification
 
-Commit and deploy this verified tree with the factory container helper (slug
-`clean-family-coop-room`, root Dockerfile, port `8080`), then require live
-`/health` to equal the deployed commit and rerun the factory URL/browser checks. The
-optional paid product registration noted below remains a commercial launch
-task, not a blocker for the free product or this container repair.
+- Repair commit `fe511d135ef9f360c4b4d52c24c6b7b024b93539` was pushed to
+  `origin/main` and deployed with the factory container helper using slug
+  `clean-family-coop-room`, the root Dockerfile, and port `8080`.
+- ACR image `sf-clean-family-coop-room:fe511d135ef9` has digest
+  `sha256:5dbe21f8bdc0f69d4563e7ce30d921185352c8dcdc637113d632d8381ee1f75b`.
+  Azure Container App revision `sf-clean-family-coop-room--0000001` reached
+  `Healthy`/`Provisioned` with that exact image.
+- Live `GET https://clean-family-coop-room.sociobot.in/health` returned HTTP
+  200 and
+  `{"build":"fe511d135ef9f360c4b4d52c24c6b7b024b93539","status":"ok"}`;
+  it also returned CSP, `nosniff`, frame denial, no-referrer, and no-store
+  headers.
+- Factory `verify-url.sh` against production passed in 591 ms with the correct
+  title/lang, one `h1`, a main landmark, no missing image alt, and no console
+  or page errors.
+- A fresh live Chromium check passed on desktop and a 390×844 touch viewport:
+  axe reported no serious/critical findings; the skip link received its 3 px
+  focus outline; the mobile document had no horizontal overflow; reduced
+  motion had no running animation duration; the service worker was controlling
+  with no installing/waiting update; offline reload restored the landing page;
+  requests stayed first-party; and fresh local storage remained empty.
+
+The handoff-only successor commit is redeployed with the same helper so the
+final live `/health` identity remains equal to `origin/main`. The optional paid
+product registration noted below remains a commercial launch task, not a
+blocker for the free product or this container repair.
 
 ## Repair handoff — 2026-08-28
 
