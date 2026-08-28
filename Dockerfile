@@ -7,7 +7,12 @@ RUN npm ci && npm run build
 FROM rust:1.88-bookworm AS backend
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
+COPY build.rs ./
 COPY src ./src
+COPY .git ./.git
+ARG BUILD_SHA
+ENV BUILD_SHA=${BUILD_SHA}
+RUN test -n "$BUILD_SHA" || test -d .git
 RUN cargo build --release
 
 FROM debian:bookworm-slim AS runtime
@@ -24,6 +29,7 @@ COPY --from=frontend /build/dist ./dist
 ENV PORT=8080 \
     FRONTEND_DIR=/app/dist \
     DATABASE_URL=sqlite:///data/together-room.db?mode=rwc \
+    TRUST_PROXY_HEADERS=1 \
     RUST_LOG=together_room=info,tower_http=info
 USER together
 EXPOSE 8080

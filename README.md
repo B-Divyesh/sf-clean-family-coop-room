@@ -18,6 +18,11 @@ Live product: <https://clean-family-coop-room.sociobot.in>
 
 No third-party runtime scripts, fonts, analytics, or paid service dependencies are used.
 
+To protect the private six-digit room boundary, the server accepts at most six
+room creations, 12 joins, and 20 WebSocket upgrade attempts per client IP in a
+rolling minute. Limited requests return `429` with `Retry-After`; normal game
+traffic is not rate limited by this policy.
+
 ## Develop
 
 Requirements: Node 22+, npm, Rust 1.88+.
@@ -35,6 +40,8 @@ The backend accepts these environment variables:
 | `PORT` | `8080` | HTTP port |
 | `DATABASE_URL` | `sqlite://together-room.db?mode=rwc` | SQLite connection |
 | `FRONTEND_DIR` | `dist` | built assets to serve |
+| `BUILD_SHA` | checked-out Git SHA | Immutable release identity reported by `/health` |
+| `TRUST_PROXY_HEADERS` | unset | Set to `1` only behind the deployment proxy so rate limits use its client IP header |
 | `RUST_LOG` | info filters | structured log level |
 
 ## Build and verify
@@ -44,7 +51,7 @@ npm test             # Vitest plus Cargo unit/integration tests
 npm run build        # reproducible frontend output at dist/index.html
 npm run check        # strict TypeScript and clippy
 npm run test:e2e     # Chromium desktop + 390 px mobile, axe included
-docker build -t together-room .
+docker build --build-arg BUILD_SHA="$(git rev-parse HEAD)" -t together-room .
 docker run --rm -p 8080:8080 -v together-data:/data together-room
 ```
 

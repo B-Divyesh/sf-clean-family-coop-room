@@ -1,7 +1,8 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
+    net::IpAddr,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
@@ -9,7 +10,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path, Query, State,
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -25,6 +26,35 @@ use tokio::sync::{broadcast, Mutex};
 use crate::game::{self, MoveInput, RoomGame};
 
 const ROOM_LIFETIME_SECONDS: i64 = 2 * 60 * 60;
+const ROOM_RATE_WINDOW: Duration = Duration::from_secs(60);
+pub const CREATE_ROOM_LIMIT: usize = 6;
+pub const JOIN_ROOM_LIMIT: usize = 12;
+pub const SOCKET_UPGRADE_LIMIT: usize = 20;
+
+#[derive(Clone, Copy)]
+pub enum RoomRequestBucket {
+    Create,
+    Join,
+    Socket,
+}
+
+struct ClientRateLimits {
+    create: VecDeque<Instant>,
+    join: VecDeque<Instant>,
+    socket: VecDeque<Instant>,
+    last_seen: Instant,
+}
+
+impl ClientRateLimits {
+    fn new(now: Instant) -> Self {
+        Self {
+            create: VecDeque::new(),
+            join: VecDeque::new(),
+            socket: VecDeque::new(),
+            last_seen: now,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,6 +62,8 @@ pub struct AppState {
     channels: Arc<Mutex<HashMap<String, broadcast::Sender<String>>>>,
     presence: Arc<Mutex<HashMap<String, [usize; 2]>>>,
     mutation_lock: Arc<Mutex<()>>,
+    request_limits: Arc<Mutex<HashMap<String, ClientRateLimits>>>,
+    trust_proxy_headers: bool,
 }
 
 impl AppState {
@@ -41,7 +73,77 @@ impl AppState {
             channels: Arc::new(Mutex::new(HashMap::new())),
             presence: Arc::new(Mutex::new(HashMap::new())),
             mutation_lock: Arc::new(Mutex::new(())),
+            request_limits: Arc::new(Mutex::new(HashMap::new())),
+            trust_proxy_headers: false,
         }
+    }
+
+    pub fn with_trusted_proxy_headers(mut self, trust_proxy_headers: bool) -> Self {
+        self.trust_proxy_headers = trust_proxy_headers;
+        self
+    }
+
+    pub fn client_identity(
+        &self,
+        headers: &HeaderMap,
+        extensions: &axum::http::Extensions,
+    ) -> String {
+        if self.trust_proxy_headers {
+            if let Some(ip) = headers
+                .get("x-forwarded-for")
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.split(',').next())
+                .map(str::trim)
+                .and_then(|value| value.parse::<IpAddr>().ok())
+            {
+                return ip.to_string();
+            }
+        }
+        extensions
+            .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+            .map(|axum::extract::ConnectInfo(address)| address.ip().to_string())
+            .unwrap_or_else(|| "unknown-client".to_owned())
+    }
+
+    pub async fn take_room_request(
+        &self,
+        client: &str,
+        bucket: RoomRequestBucket,
+    ) -> Result<(), u64> {
+        let now = Instant::now();
+        let mut clients = self.request_limits.lock().await;
+        clients.retain(|_, limits| now.duration_since(limits.last_seen) < ROOM_RATE_WINDOW);
+        let limits = clients
+            .entry(client.to_owned())
+            .or_insert_with(|| ClientRateLimits::new(now));
+        limits.last_seen = now;
+        let (requests, limit) = match bucket {
+            RoomRequestBucket::Create => (&mut limits.create, CREATE_ROOM_LIMIT),
+            RoomRequestBucket::Join => (&mut limits.join, JOIN_ROOM_LIMIT),
+            RoomRequestBucket::Socket => (&mut limits.socket, SOCKET_UPGRADE_LIMIT),
+        };
+        while requests
+            .front()
+            .is_some_and(|request| now.duration_since(*request) >= ROOM_RATE_WINDOW)
+        {
+            requests.pop_front();
+        }
+        if requests.len() >= limit {
+            let retry_after = requests
+                .front()
+                .map(|request| {
+                    // Retry-After is whole seconds; round up so a client never retries
+                    // before the oldest request has actually left the rolling window.
+                    ROOM_RATE_WINDOW
+                        .saturating_sub(now.duration_since(*request))
+                        .as_secs()
+                        .saturating_add(1)
+                })
+                .unwrap_or(1);
+            return Err(retry_after);
+        }
+        requests.push_back(now);
+        Ok(())
     }
 }
 

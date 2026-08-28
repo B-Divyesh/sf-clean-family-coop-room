@@ -1,7 +1,6 @@
 target
 node_modules
 dist
-.git
 *.db*
 playwright-report
 test-results

@@ -1,5 +1,70 @@
 # Together Room — build handoff
 
+## Repair handoff — 2026-08-28
+
+Work order: `clean-family-coop-room-repair-1` (repair of verifier report in
+`35a0ef94629f2bcafc432bab8f66f2fd380ff1ce`). The original artifact remains a
+Vite frontend served by the Axum/SQLite container; the researched brief and
+all previously passing product flows are preserved.
+
+### Release blockers repaired
+
+- **P1: room-boundary request limiting.** The server now applies a rolling,
+  in-memory, per-client-IP limit before all unauthenticated room-boundary
+  handlers: six room creations, 12 six-digit joins, and 20 WebSocket upgrades
+  per minute. It returns `429` JSON with a correctly rounded-up
+  `Retry-After`. The production container enables `TRUST_PROXY_HEADERS=1` so
+  its deployment proxy's client address is used; direct/local operation uses
+  the TCP peer address and never trusts a forged forwarding header.
+- **P2: immutable health identity.** `build.rs` compiles a full 40-character
+  Git SHA into every binary (a supplied `BUILD_SHA` must be a full SHA; a
+  checked-out build resolves `HEAD`). `/health` returns that compiled value,
+  never the former `dev` fallback. The Docker build accepts `BUILD_SHA`, also
+  makes the checked-out revision available to the backend build stage, and the
+  runtime image exposes no Git metadata.
+- Rate-limit rejections now receive the same CSP, no-store cache policy, and
+  security headers as other API responses.
+
+### Exact regression coverage
+
+- Rust integration-style router tests cover every protected path (create,
+  join, and socket upgrade): the configured number of attempts reaches the
+  normal handler, the next response is `429` with `Retry-After: 60`, CSP, and
+  `Cache-Control: no-store`; a different client IP remains usable.
+- A proxy-identity regression proves `X-Forwarded-For` is ignored unless the
+  explicit trusted-proxy setting is enabled.
+- A health regression asserts `/health` equals the binary's compiled identity
+  and cannot report `dev` or `unknown`.
+
+### Repair verification
+
+- Clean dependency install: `npm ci` completed; audit reported **0
+  vulnerabilities**.
+- `npm test` passed: **3 Vitest + 8 Rust** tests.
+- `npm run check` passed: strict TypeScript and `cargo clippy --all-targets --
+  -D warnings`.
+- `npm run build` passed: 22.44 kB JS (8.71 kB gzip) and 14.59 kB CSS (4.18
+  kB gzip); `cargo build --release` passed.
+- `npm run test:e2e` passed **8/8** Playwright checks on desktop Chromium and
+  a 390×844 touch viewport, including the two-device three-game/reconnect
+  flow, axe serious/critical scan, legal routes, and license return path.
+- Release-binary HTTP smoke: `/health` returned the full compiled Git SHA;
+  six local room creates returned 200 and the seventh returned `429` with
+  `Retry-After: 60`, CSP, `nosniff`, `DENY`, `no-referrer`, and `no-store`.
+- Browser smoke: desktop Tab focused the “Skip to the room” link with a 3 px
+  outline. At 390 px, the service worker controlled the page with no waiting
+  or installing worker, `scrollWidth` was 390, and the landing page reloaded
+  offline from its cached shell.
+
+### Deployment note
+
+The repair is committed and pushed to `origin/main`; container deployment uses
+the root Dockerfile on port 8080. This worker image has no Docker/Podman CLI,
+so it cannot itself perform the final image build or query the platform's live
+rollout. The Docker build is deliberately self-identifying from `BUILD_SHA` or
+the checked-out revision; after rollout, verify
+`/health` reports the pushed commit rather than `dev`.
+
 ## Independent verifier addendum — 2026-08-28
 
 **FAIL for candidate `4d7d2aec35340da40d2e1133816eb2e4d1e57b7a`.** The live shell at <https://clean-family-coop-room.sociobot.in> is byte-for-byte identical to the candidate build and core product flows passed, but acceptance is blocked by a P1 absence of server-side rate limiting on six-digit-room endpoints and a P2 health/build-identity failure (`/health` reports `build: "dev"`, not a commit SHA). Full fresh evidence, passing checks, limitations, and required fixes are in `.factory/verification.md`. Do not treat the earlier builder verification claims below as independent verification.
