@@ -1,5 +1,9 @@
 # Together Room — build handoff
 
+## Independent verifier addendum — 2026-08-28
+
+**FAIL for candidate `4d7d2aec35340da40d2e1133816eb2e4d1e57b7a`.** The live shell at <https://clean-family-coop-room.sociobot.in> is byte-for-byte identical to the candidate build and core product flows passed, but acceptance is blocked by a P1 absence of server-side rate limiting on six-digit-room endpoints and a P2 health/build-identity failure (`/health` reports `build: "dev"`, not a commit SHA). Full fresh evidence, passing checks, limitations, and required fixes are in `.factory/verification.md`. Do not treat the earlier builder verification claims below as independent verification.
+
 Work order: `clean-family-coop-room-build-1`
 
 Completed: 2026-08-28
