@@ -33,3 +33,47 @@ test('a returned purchase license is stored, stripped from the URL, and verified
   await expect(page).toHaveURL('/');
   expect(await page.evaluate(() => localStorage.getItem('sb_license:clean-family-coop-room'))).toBe('test-license-token');
 });
+
+test('keyboard focus starts on the visible skip link', async ({ page }) => {
+  await page.goto('/');
+  await page.keyboard.press('Tab');
+  const skip = page.getByRole('link', { name: 'Skip to the room' });
+  await expect(skip).toBeFocused();
+  await expect(skip).toHaveCSS('outline-width', '3px');
+});
+
+test('the installed shell updates cleanly and reloads offline', async ({ page, context }) => {
+  await page.goto('/');
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  if (!await page.evaluate(() => Boolean(navigator.serviceWorker.controller))) await page.reload();
+  await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    await registration.update();
+  });
+  await page.reload();
+  expect(await page.evaluate(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    return {
+      controlled: Boolean(navigator.serviceWorker.controller),
+      installing: Boolean(registration.installing),
+      waiting: Boolean(registration.waiting)
+    };
+  })).toEqual({ controlled: true, installing: false, waiting: false });
+
+  await context.setOffline(true);
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('A tiny room to play together.');
+  } finally {
+    await context.setOffline(false);
+  }
+});
+
+test('a fresh landing visit stays first-party and stores no identity', async ({ page }) => {
+  const origins = new Set<string>();
+  page.on('request', (request) => origins.add(new URL(request.url()).origin));
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  expect([...origins]).toEqual(['http://127.0.0.1:8080']);
+  expect(await page.evaluate(() => Object.keys(localStorage))).toEqual([]);
+});

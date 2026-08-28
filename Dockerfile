@@ -1,3 +1,5 @@
+ARG BUILD_SHA=dev
+
 FROM node:22-bookworm-slim AS frontend
 WORKDIR /build
 COPY package.json package-lock.json tsconfig.json vite.config.ts ./
@@ -5,17 +7,17 @@ COPY frontend ./frontend
 RUN npm ci && npm run build
 
 FROM rust:1.88-bookworm AS backend
+ARG BUILD_SHA
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY build.rs ./
 COPY src ./src
-COPY .git ./.git
-ARG BUILD_SHA
 ENV BUILD_SHA=${BUILD_SHA}
-RUN test -n "$BUILD_SHA" || test -d .git
 RUN cargo build --release
 
 FROM debian:bookworm-slim AS runtime
+ARG BUILD_SHA
+LABEL org.opencontainers.image.revision=${BUILD_SHA}
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
@@ -27,6 +29,7 @@ WORKDIR /app
 COPY --from=backend /build/target/release/together-room /usr/local/bin/together-room
 COPY --from=frontend /build/dist ./dist
 ENV PORT=8080 \
+    BUILD_SHA=${BUILD_SHA} \
     FRONTEND_DIR=/app/dist \
     DATABASE_URL=sqlite:///data/together-room.db?mode=rwc \
     TRUST_PROXY_HEADERS=1 \

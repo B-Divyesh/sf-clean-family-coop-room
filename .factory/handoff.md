@@ -1,5 +1,65 @@
 # Together Room — build handoff
 
+## Repair handoff — 2026-08-28 (work order `clean-family-coop-room-repair-2`)
+
+Base candidate: `bea036ec6bc187b2cc20964f59dda1f550cbb61b`. The
+artifact remains a Vite frontend served by the Axum/SQLite container on port
+8080; no product or deployment-class change was made.
+
+### Failure reproduced and root cause repaired
+
+- A metadata-free `git archive` of the candidate was submitted through the
+  factory's ACR path with all three source identity arguments. ACR run `chae`
+  failed at Dockerfile step 11 with `COPY failed: ... stat .git: file does not
+  exist`, reproducing the reported worker failure.
+- The Dockerfile no longer copies or reads `.git`; `.dockerignore` excludes it.
+  It declares `ARG BUILD_SHA=dev`, makes the value available while compiling,
+  and carries it into the non-root runtime as both `BUILD_SHA` and the OCI
+  `org.opencontainers.image.revision` label.
+- `build.rs` now uses only the supplied `BUILD_SHA`, normalizing an omitted or
+  empty value to `dev`. It never shells out to Git. The compiled value is used
+  by `/health` and the structured startup identity log.
+- `tests/docker_contract.rs` prevents future Dockerfile/build-script reliance
+  on repository metadata and asserts the backend/runtime identity wiring.
+- Browser coverage now explicitly checks visible keyboard focus, a clean
+  service-worker update followed by an offline shell reload, and that a fresh
+  landing visit makes only first-party requests and stores no browser identity.
+
+### Exact verification evidence
+
+- Original clean command `npm ci && npm run build`: passed; npm found 0
+  vulnerabilities. Vite emitted 22.44 kB JS (8.71 kB gzip) and 14.59 kB CSS
+  (4.18 kB gzip).
+- `npm test`: passed 3 Vitest, 8 Rust unit/router, and 2 container-contract
+  tests. `npm run check`, `cargo fmt --all -- --check`, `git diff --check`, and
+  `npm audit --omit=dev --audit-level=high` also passed.
+- `npm run test:e2e`: 14/14 passed on desktop Chromium and a touch-enabled
+  390×844 viewport. This includes two independent devices completing all
+  three games and reconnecting, axe serious/critical scans, legal and license
+  flows, keyboard focus, update/offline behavior, and privacy assertions.
+- A release build compiled with
+  `BUILD_SHA=0123456789abcdef0123456789abcdef01234567` logged that exact value
+  at startup and returned it from `/health`, including when started with an
+  otherwise empty environment. Its health endpoint completed 1,000/1,000
+  requests in 4,022 ms (about 248 requests/second).
+- Factory `verify-url.sh` against the release server: HTTP 200 in 607 ms,
+  correct title/lang, exactly one `h1`, a main landmark, no missing image alt,
+  and no console/page errors.
+- Lighthouse 13.0.1 mobile: **100 performance / 100 accessibility / 100 best
+  practices / 100 SEO**; FCP 1.0 s, LCP 1.3 s, CLS 0, TBT 0 ms.
+- Metadata-free ACR build `chb4`: passed and pushed digest
+  `sha256:7a3b499dd9d5c2d0c1bdb4105a0deb0ac4544cdd40e5c91ebf191286251a5ee0`.
+  Registry config inspection confirmed the sentinel in the OCI revision label
+  and runtime `BUILD_SHA`, user `together`, and exposed port `8080/tcp`.
+
+### Remaining factory step
+
+Commit and deploy this verified tree with the factory container helper (slug
+`clean-family-coop-room`, root Dockerfile, port `8080`), then require live
+`/health` to equal the deployed commit and rerun the factory URL/browser checks. The
+optional paid product registration noted below remains a commercial launch
+task, not a blocker for the free product or this container repair.
+
 ## Repair handoff — 2026-08-28
 
 Work order: `clean-family-coop-room-repair-1` (repair of verifier report in

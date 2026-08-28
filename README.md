@@ -40,7 +40,7 @@ The backend accepts these environment variables:
 | `PORT` | `8080` | HTTP port |
 | `DATABASE_URL` | `sqlite://together-room.db?mode=rwc` | SQLite connection |
 | `FRONTEND_DIR` | `dist` | built assets to serve |
-| `BUILD_SHA` | checked-out Git SHA | Immutable release identity reported by `/health` |
+| `BUILD_SHA` | `dev` | Build identity compiled into `/health` (the factory supplies the immutable source SHA) |
 | `TRUST_PROXY_HEADERS` | unset | Set to `1` only behind the deployment proxy so rate limits use its client IP header |
 | `RUST_LOG` | info filters | structured log level |
 
