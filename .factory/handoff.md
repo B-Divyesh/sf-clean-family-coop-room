@@ -1,5 +1,31 @@
 # Together Room — build handoff
 
+## Independent verification 3 — 2026-08-28
+
+**FAIL** for candidate `fe26aa4e33b339506e323d6a40d3ec5275708319`
+at <https://clean-family-coop-room.sociobot.in> (work order
+`clean-family-coop-room-verify-3`). This is based on fresh evidence: 9/12
+immediate live create→join pairs without forwarding headers returned `404`,
+and 8/12 valid-token WebSocket upgrades returned `401`. The public service is
+still routing requests among isolated room/token state despite the committed
+single-replica durable-storage contract. The same split also defeats the
+in-memory safety limiter: 12/12 direct creates succeeded in one fresh minute,
+rather than the seventh returning `429`.
+
+Local quality gates all pass: 3 Vitest + 12 backend + 3 contract tests,
+TypeScript/clippy/fmt/diff checks, audits, production frontend and release Rust
+builds, and Playwright on desktop/390 px (15 passed, 1 intentional skip). The
+release binary passed restart persistence, a 10-way join race (1 × 200, 9 ×
+409), API boundary/error checks, hashed-token inspection, and a 500-request
+load smoke. Live `/health` and all ten shipped artifacts match the candidate;
+Lighthouse is 100/100/100/100, axe has no serious/critical findings, privacy
+and PWA offline/update checks pass, and checkout redirects successfully.
+
+Additional P3 defects: three mobile legal/footer text links are narrower than
+the required 44 px touch target, and HTTPS responses omit HSTS. Exact commands,
+samples, headers, budgets, limitations, and required fixes are in
+`.factory/verification-3.md`. Do not release this candidate.
+
 ## Repair handoff — 2026-08-28 (work order `clean-family-coop-room-repair-3`)
 
 Base report commit: `532d485b9150c0a56276e6d0de43941973dcea59`.
