@@ -16,9 +16,10 @@ deployment class are unchanged.
   production Container App has that exact scale, environment, mount, and
   volume configuration. A room created before an active-revision restart was
   joined afterward with HTTP 200, proving durable state survives replacement.
-  Network-filesystem mode uses one database connection and bounded retries for
-  transient locks during replacement; a regression opens two replacement
-  pools concurrently against the same `DELETE`-journal database.
+  Network-filesystem mode uses SQLite's portable `unix-dotfile` VFS, one
+  database connection, and bounded retries for transient lock/open failures
+  during replacement; a regression opens two replacement pools concurrently
+  against the same `DELETE`-journal, dotfile-lock database.
 - **Caller-controlled rate-limit identity:** a trusted appending proxy now
   selects the rightmost valid `X-Forwarded-For` address, so caller-controlled
   prefixes cannot select buckets. Regression coverage rotates a different

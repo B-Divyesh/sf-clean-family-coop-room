@@ -42,7 +42,7 @@ The backend accepts these environment variables:
 | `FRONTEND_DIR` | `dist` | built assets to serve |
 | `BUILD_SHA` | `dev` | Build identity compiled into `/health` (the factory supplies the immutable source SHA) |
 | `TRUST_PROXY_HEADERS` | unset | Set to `1` only behind an appending trusted proxy; the rightmost observed client address is used |
-| `SQLITE_JOURNAL_MODE` | `wal` | Set to `delete` on the production Azure Files mount |
+| `SQLITE_JOURNAL_MODE` | `wal` | Set to `delete` on the production Azure Files mount; its `DATABASE_URL` also selects SQLite's `unix-dotfile` VFS |
 | `RUST_LOG` | info filters | structured log level |
 
 ## Build and verify

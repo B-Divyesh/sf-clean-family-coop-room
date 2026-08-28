@@ -13,6 +13,7 @@
     "shareName": "sf-clean-family-coop-room-data"
   },
   "environment": {
+    "DATABASE_URL": "sqlite:///data/together-room.db?mode=rwc&vfs=unix-dotfile",
     "SQLITE_JOURNAL_MODE": "delete"
   },
   "reason": "Together Room is a single-tenant SQLite service. One durable replica keeps room, reconnect-token, game, WebSocket, presence, and in-memory rate-limit ownership coherent."

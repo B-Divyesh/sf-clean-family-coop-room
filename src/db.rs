@@ -26,8 +26,8 @@ async fn connect_with_journal(url: &str, delete_journal: bool) -> Result<SqliteP
     for attempt in 1..=attempts {
         match connect_once(url, delete_journal, max_connections).await {
             Ok(pool) => return Ok(pool),
-            Err(error) if is_locked(&error) && attempt < attempts => {
-                tracing::warn!(attempt, "SQLite is locked during startup; retrying");
+            Err(error) if is_retryable_startup_error(&error) && attempt < attempts => {
+                tracing::warn!(attempt, %error, "SQLite storage is temporarily unavailable; retrying");
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
             Err(error) => return Err(error),
@@ -81,9 +81,11 @@ async fn connect_once(
     Ok(pool)
 }
 
-fn is_locked(error: &sqlx::Error) -> bool {
+fn is_retryable_startup_error(error: &sqlx::Error) -> bool {
     matches!(error, sqlx::Error::Database(database)
-        if database.code().as_deref() == Some("5") || database.message().contains("locked"))
+        if matches!(database.code().as_deref(), Some("5" | "14"))
+            || database.message().contains("locked")
+            || database.message().contains("unable to open"))
 }
 
 #[cfg(test)]
@@ -96,7 +98,7 @@ mod tests {
             "together-room-startup-{}.db",
             rand::random::<u64>()
         ));
-        let url = format!("sqlite://{}?mode=rwc", path.display());
+        let url = format!("sqlite://{}?mode=rwc&vfs=unix-dotfile", path.display());
         let (first, second) = tokio::join!(
             connect_with_journal(&url, true),
             connect_with_journal(&url, true)

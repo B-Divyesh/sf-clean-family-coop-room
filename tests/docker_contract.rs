@@ -53,5 +53,9 @@ fn sqlite_deployment_is_single_replica_and_durably_mounted() {
         deployment["state"]["shareName"],
         "sf-clean-family-coop-room-data"
     );
+    assert_eq!(
+        deployment["environment"]["DATABASE_URL"],
+        "sqlite:///data/together-room.db?mode=rwc&vfs=unix-dotfile"
+    );
     assert_eq!(deployment["environment"]["SQLITE_JOURNAL_MODE"], "delete");
 }
