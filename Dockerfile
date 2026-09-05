@@ -1,14 +1,19 @@
 ARG BUILD_SHA=dev
 
 FROM node:22-bookworm-slim AS frontend
+ARG BUILD_SHA
 WORKDIR /build
 COPY package.json package-lock.json tsconfig.json vite.config.ts ./
 COPY frontend ./frontend
+ENV VITE_BUILD_SHA=${BUILD_SHA}
 RUN npm ci && npm run build
 
-FROM rust:1.88-bookworm AS backend
+FROM rust:1-slim-bookworm AS backend
 ARG BUILD_SHA
 WORKDIR /build
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml Cargo.lock ./
 COPY build.rs ./
 COPY src ./src

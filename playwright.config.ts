@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './tests',
   timeout: 30_000,
   fullyParallel: false,
+  workers: 1,
   reporter: 'line',
   use: {
     baseURL: 'http://127.0.0.1:8080',
@@ -14,7 +15,7 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } }
   ],
   webServer: {
-    command: 'npm run build && DATABASE_URL="sqlite://together-room-e2e.db?mode=rwc" FRONTEND_DIR=dist PORT=8080 cargo run',
+    command: 'npm run build && DATABASE_URL="sqlite://together-room-e2e.db?mode=rwc" FRONTEND_DIR=dist TRUST_PROXY_HEADERS=1 PORT=8080 cargo run',
     url: 'http://127.0.0.1:8080/health',
     reuseExistingServer: true,
     timeout: 120_000

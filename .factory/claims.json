@@ -1,0 +1,107 @@
+[
+  {
+    "id": "demo-sandbox",
+    "claim": "The sample is populated, resettable, and cannot change real room data.",
+    "where": "landing sample action, demo banner, README",
+    "test": "npm run test:claims -- --grep \"@claim:demo-sandbox\"",
+    "sandbox": "fresh browser context with a sentinel real-storage value; assert sample output, reset, request methods, and unchanged storage"
+  },
+  {
+    "id": "remote-room",
+    "claim": "Two devices can join one room with a six-digit code and no account.",
+    "where": "landing first screen, how it works, README",
+    "test": "npm run test:claims -- --grep \"@claim:remote-room\"",
+    "sandbox": "two fresh browser contexts, entered through /demo, using the clean local test database"
+  },
+  {
+    "id": "three-games",
+    "claim": "A room can complete Star Signal, Patchwork Pair, and Firefly Ferry.",
+    "where": "landing headline, game list, README",
+    "test": "npm run test:claims -- --grep \"@claim:three-games\"",
+    "sandbox": "two fresh browser contexts complete all three games against the clean local test database"
+  },
+  {
+    "id": "turn-taking",
+    "claim": "Moves alternate between the two players.",
+    "where": "landing how it works, room lobby, README",
+    "test": "npm run test:claims -- --grep \"@claim:turn-taking\"",
+    "sandbox": "two fresh browser contexts; every move is made by the enabled player and advances the other player's turn"
+  },
+  {
+    "id": "reconnect",
+    "claim": "Reloading reconnects the device to the same room state.",
+    "where": "landing how it works, README",
+    "test": "npm run test:claims -- --grep \"@claim:reconnect\"",
+    "sandbox": "two fresh browser contexts and a clean local test database; make a move, reload, and assert the saved progress"
+  },
+  {
+    "id": "continued-room",
+    "claim": "A completed room stays open for another game or round.",
+    "where": "round result",
+    "test": "npm run test:claims -- --grep \"@claim:continued-room\"",
+    "sandbox": "two fresh browser contexts complete a round, return to the game list, and start the next game"
+  },
+  {
+    "id": "privacy-boundary",
+    "claim": "The landing page and sample use no accounts, ads, analytics, or third-party runtime files.",
+    "where": "landing facts and privacy section, privacy page, README",
+    "test": "npm run test:claims -- --grep \"@claim:privacy-boundary\"",
+    "sandbox": "fresh browser context; record every request through the sample and inspect browser storage"
+  },
+  {
+    "id": "offline-sample",
+    "claim": "The welcome page and sample reopen offline after the first visit.",
+    "where": "README and offline state",
+    "test": "npm run test:claims -- --grep \"@claim:offline-sample\"",
+    "sandbox": "dedicated fresh browser context; visit /demo, wait for its service worker, set offline, then reload"
+  },
+  {
+    "id": "room-expiry",
+    "claim": "Real rooms expire and are deleted after two hours.",
+    "where": "landing first-screen fact, privacy page, README",
+    "test": "cargo test claim_room_expiry_rejects_join_and_cleanup_deletes_state",
+    "sandbox": "isolated in-memory SQLite database; expire a created room, assert join returns 410, run cleanup, and assert deletion"
+  },
+  {
+    "id": "data-minimization",
+    "claim": "Real rooms store game state, timestamps, expiry, and hashed device keys.",
+    "where": "privacy page, README",
+    "test": "cargo test claim_room_storage_uses_only_expected_fields_and_hashes_device_keys",
+    "sandbox": "isolated in-memory SQLite database; create a room and inspect persisted values and the hashed token"
+  },
+  {
+    "id": "rate-limits",
+    "claim": "The server limits creates, joins, and socket attempts and returns 429 with Retry-After.",
+    "where": "README",
+    "test": "cargo test claim_rate_limits_return_retry_after_for_every_room_boundary",
+    "sandbox": "isolated in-memory SQLite routers and fixed test client addresses"
+  },
+  {
+    "id": "paid-pack",
+    "claim": "The US$8 one-time family pack adds two palettes and one celebration stamp.",
+    "where": "landing pricing, terms, README",
+    "test": "npm run test:claims -- --grep \"@claim:paid-pack\"",
+    "sandbox": "fresh browser with recorded valid license response; assert checkout target and observable palette/stamp results"
+  },
+  {
+    "id": "billing-boundary",
+    "claim": "The buy action leaves Together Room for checkout handled by Sociobot/Dodo.",
+    "where": "landing pricing, privacy, terms, README",
+    "test": "npm run test:claims -- --grep \"@claim:billing-boundary\"",
+    "sandbox": "fresh browser; assert the buy action targets the product-specific Sociobot checkout before using a recorded license response"
+  },
+  {
+    "id": "paid-core-free",
+    "claim": "All three games remain available when a license is inactive.",
+    "where": "landing pricing, terms, README",
+    "test": "npm run test:claims -- --grep \"@claim:paid-core-free\"",
+    "sandbox": "fresh browser with recorded revoked-license response; create a room and assert all three games remain present"
+  },
+  {
+    "id": "license-daily",
+    "claim": "A restored license stays in this browser and is checked at most once per day.",
+    "where": "privacy page, README",
+    "test": "npm run test:claims -- --grep \"@claim:license-daily\"",
+    "sandbox": "fresh browser seeded with a recent valid verdict; assert paid UI, retained token, and zero verification requests"
+  }
+]

@@ -12,6 +12,14 @@ interface Session { code: string; token: string; seat: Seat; expires_at: number 
 interface RoomGame { kind: string; phase: 'lobby' | 'playing' | 'won' | 'paused'; turn: Seat; round: number; moves: number; board: Record<string, unknown>; message: string }
 interface RoomEvent { type: 'state'; room: RoomGame; connected: [boolean, boolean] }
 interface LicenseVerdict { valid: boolean; checked_at: number; reason?: string }
+interface DemoSample {
+  workspace_id: string;
+  room_code: string;
+  expires_at: number;
+  players: string[];
+  active_game: RoomGame;
+  recent_rounds: Array<{ game: string; turns: number; result: string }>;
+}
 
 const appElement = document.querySelector<HTMLDivElement>('#app');
 if (!appElement) throw new Error('App root missing');
@@ -30,6 +38,12 @@ let selectedPatch = 'mint';
 let unlocked = false;
 let notice = '';
 let noticeKind: 'error' | 'success' = 'error';
+let demoSample: DemoSample | null = null;
+let demoLoading = false;
+let demoProgress = 4;
+
+const BUILD_ID = (import.meta.env.VITE_BUILD_SHA || 'dev').slice(0, 12);
+const SITE_ORIGIN = 'https://clean-family-coop-room.sociobot.in';
 
 function sessionKey(code: string): string { return `together_room:${code}`; }
 
@@ -60,27 +74,64 @@ function renderNotice(): void {
 }
 
 function layout(content: string): string {
+  const demo = location.pathname === '/demo';
   return `
     <header class="site-header">
       <a class="brand" href="/" data-nav><img src="/assets/mark.svg" width="52" height="32" alt="" /> Together Room</a>
-      <div class="header-tools"><span class="privacy-chip">private by design</span>${session ? '<button class="quiet small" data-action="leave">Leave room</button>' : ''}</div>
+      <nav class="primary-nav" aria-label="Primary"><a href="/demo" data-nav ${demo ? 'aria-current="page"' : ''}>Demo</a><a href="/privacy" data-nav ${location.pathname === '/privacy' ? 'aria-current="page"' : ''}>Privacy</a>${session ? '<button class="quiet small" data-action="leave">Leave room</button>' : ''}</nav>
     </header>
+    <div class="route-announcer visually-hidden" aria-live="polite" aria-atomic="true"></div>
+    ${demo ? '<aside class="demo-banner" aria-label="Demo mode"><strong>Demo — sample data, nothing is saved</strong><div><button class="quiet small" data-action="reset-demo">Reset demo</button><button class="quiet small" data-action="start-real">Start for real</button></div></aside>' : ''}
     <div id="status-banner" class="status-banner" role="status" aria-live="polite" ${notice ? '' : 'hidden'}></div>
     ${content}
     <footer class="site-footer">
-      <span>No ads · no accounts · no open chat · rooms expire</span>
-      <nav class="footer-links" aria-label="Footer"><a href="/privacy" data-nav>Privacy</a><a href="/terms" data-nav>Terms</a><span>Hero art made with the factory image model</span></nav>
+      <span>Three remote co-op games for a parent and child.</span>
+      <nav class="footer-links" aria-label="Footer"><a href="/privacy" data-nav>Privacy</a><a href="/terms" data-nav>Terms</a><a href="https://sociobot.in" rel="external">Built by Param Factory</a><span>Build ${BUILD_ID}</span><span>Hero art was generated with the factory image model.</span></nav>
     </footer>`;
 }
 
-function render(): void {
+function updateRouteMetadata(): void {
+  const path = location.pathname;
+  const metadata = path === '/demo'
+    ? ['Demo — Together Room', 'Try a populated Together Room sample without creating a real room.']
+    : path === '/privacy'
+      ? ['Privacy — Together Room', 'Read what Together Room stores, why it is needed, and when room data is deleted.']
+      : path === '/terms'
+        ? ['Terms — Together Room', 'Read the terms for rooms and the optional one-time family pack.']
+        : path === '/'
+          ? [session ? `Room ${displayRoomCode(session.code)} — Together Room` : 'Together Room — Play remote co-op games', 'Play three turn-based games with a family member on another device.']
+          : ['Page not found — Together Room', 'This Together Room page does not exist. Return home or open the sample.'];
+  document.title = metadata[0];
+  document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute('content', metadata[1]);
+  document.querySelector<HTMLMetaElement>('meta[property="og:title"]')?.setAttribute('content', metadata[0]);
+  document.querySelector<HTMLMetaElement>('meta[property="og:description"]')?.setAttribute('content', metadata[1]);
+  document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.setAttribute('content', `${SITE_ORIGIN}${path}`);
+  document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute('href', `${SITE_ORIGIN}${path}`);
+}
+
+function focusRouteHeading(): void {
+  queueMicrotask(() => {
+    const heading = document.querySelector<HTMLHeadingElement>('main h1');
+    if (!heading) return;
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+    const announcer = document.querySelector<HTMLElement>('.route-announcer');
+    if (announcer) announcer.textContent = heading.textContent ?? document.title;
+  });
+}
+
+function render(routeChange = false): void {
   applyTheme();
   const path = location.pathname;
   if (path === '/privacy') app.innerHTML = layout(privacyPage());
   else if (path === '/terms') app.innerHTML = layout(termsPage());
+  else if (path === '/demo') app.innerHTML = layout(demoPage());
+  else if (path !== '/') app.innerHTML = layout(notFoundPage());
   else if (session) app.innerHTML = layout(roomPage());
   else app.innerHTML = layout(landingPage());
+  updateRouteMetadata();
   renderNotice();
+  if (routeChange) focusRouteHeading();
 }
 
 function landingPage(): string {
@@ -88,14 +139,17 @@ function landingPage(): string {
   return `<main id="main">
     <section class="hero" aria-labelledby="page-title">
       <div class="hero-copy">
-        <p class="eyebrow">Two windows · ten good minutes</p>
-        <h1 id="page-title">A tiny room to play together.</h1>
-        <p class="lede">Three calm co-op games for a parent and child on different devices. Share six digits, take turns, then get back to your day.</p>
+        <p class="eyebrow">Remote co-op for two</p>
+        <h1 id="page-title">Play three remote co-op games</h1>
+        <p class="lede">For a parent and child on different devices who want a short activity without accounts or open chat.</p>
         <div class="entry-console">
           <div class="action-row">
-            <button class="primary" data-action="create" ${joining || offline ? 'disabled' : ''}>${joining ? 'Making room…' : 'Make a room'}</button>
+            <button class="primary" data-action="try-demo">Try it with sample data</button>
+            <button data-action="create" ${joining || offline ? 'disabled' : ''}>${joining ? 'Making room…' : 'Make a room'}</button>
             <button data-action="show-join" aria-expanded="${joinOpen}" aria-controls="join-drawer">I have a code</button>
           </div>
+          <p class="action-help">The sample opens a round in progress. Make a room to play with someone.</p>
+          <ul class="hero-facts" aria-label="Key facts"><li>No account or ads</li><li>Rooms expire after two hours</li><li>Optional family pack: US$8 once</li></ul>
           ${offline ? '<p class="field-error">You are offline. The welcome screen is saved, but making or joining a room needs a connection.</p>' : ''}
           <div class="join-drawer" id="join-drawer" ${joinOpen ? '' : 'hidden'}>
             <form data-form="join" novalidate>
@@ -108,24 +162,25 @@ function landingPage(): string {
       </div>
       <figure class="hero-art">
         <picture><source srcset="/assets/together-room-hero-720.webp 720w, /assets/together-room-hero-1200.webp 1200w" sizes="(max-width: 860px) calc(100vw - 24px), 52vw" type="image/webp" /><img src="/assets/together-room-hero-1200.webp" width="1200" height="800" fetchpriority="high" decoding="async" alt="Two cozy pixel-art treehouses on floating islands joined by a glowing stepped bridge" /></picture>
-        <figcaption class="art-caption"><span>signal: steady</span><span>players: 2</span></figcaption>
+        <figcaption class="art-caption"><span>two devices connected</span><span>players: 2</span></figcaption>
       </figure>
     </section>
-    <section class="tape" aria-label="How a room works">
-      <div class="tape-step"><span class="tape-number">1</span><div><h2>Connect</h2><p>Send a private link or read out six digits.</p></div></div>
-      <div class="tape-step"><span class="tape-number">2</span><div><h2>Choose</h2><p>Pick a two-player puzzle. No setup lesson.</p></div></div>
-      <div class="tape-step"><span class="tape-number">3</span><div><h2>Play</h2><p>Take turns for a round or two. Rejoin if Wi-Fi blips.</p></div></div>
+    <section class="tape" aria-labelledby="how-title">
+      <h2 class="section-title" id="how-title">How it works</h2>
+      <div class="tape-step"><span class="tape-number">1</span><div><h3>Share the room</h3><p>Send an invite link or read out six digits.</p></div></div>
+      <div class="tape-step"><span class="tape-number">2</span><div><h3>Choose a game</h3><p>Pick Star Signal, Patchwork Pair, or Firefly Ferry.</p></div></div>
+      <div class="tape-step"><span class="tape-number">3</span><div><h3>Take turns</h3><p>Play a round. Reloading the page reconnects this device.</p></div></div>
     </section>
     <section class="promise">
-      <div><p class="eyebrow">Bounded on purpose</p><h2>A playroom, not a platform</h2><ul class="plain-list"><li>No account or profile</li><li>No chat, strangers, feeds, or friend requests</li><li>No ads, analytics, or third-party scripts</li><li>Room state deletes after two hours</li><li>Works with keyboard, touch, and reduced motion</li></ul></div>
+      <div><p class="eyebrow">Privacy and safety</p><h2>What Together Room does not do</h2><ul class="plain-list"><li>No account or profile</li><li>No chat, public rooms, or matchmaking</li><li>No ads, analytics, or third-party scripts</li><li>No names, ages, contacts, or location requests</li></ul></div>
       ${packMarkup()}
     </section>
   </main>`;
 }
 
 function packMarkup(): string {
-  if (unlocked) return `<aside class="pack"><p class="eyebrow">Family pack restored</p><h2>Your extra tapes are ready</h2><p>Pick a room palette. Your three games and all safety features were always included.</p><div class="theme-picker" role="group" aria-label="Room palette"><button class="theme-swatch" data-theme="night" aria-label="Night palette"></button><button class="theme-swatch" data-theme="dawn" aria-label="Dawn palette"></button><button class="theme-swatch" data-theme="berry" aria-label="Berry palette"></button></div></aside>`;
-  return `<aside class="pack" aria-labelledby="pack-title"><p class="eyebrow">Optional family pack</p><h2 id="pack-title">More color, never more pressure</h2><p>Two extra room palettes, celebration stamps, and one-tap surprise picks. Every game, reconnect, and safety feature stays free.</p><p class="pack-price">US$8 once · no subscription</p><div class="pack-actions"><a class="button primary" href="${BILLING_BASE}/products/${SLUG}/checkout">Buy family pack</a></div><details class="restore"><summary>Have a license? Restore it</summary><form data-form="restore"><label for="license">License token</label><div class="form-row"><input class="license-input" id="license" name="license" autocomplete="off" required /><button>Verify license</button></div><p class="field-error" id="license-error" aria-live="polite"></p></form></details><p class="tiny">Sociobot/Dodo is the merchant of record and handles refunds. A refund disables the license. See <a href="/terms" data-nav>terms</a> and <a href="/privacy" data-nav>privacy</a>.</p></aside>`;
+  if (unlocked) return `<article class="pack"><p class="eyebrow">Family pack restored</p><h2>Your extra colors are ready</h2><p>Choose Night, Dawn, or Berry. The pack also adds one celebration stamp after a completed round.</p><p class="celebration-preview" aria-label="Celebration stamp preview">ROUND COMPLETE ✦</p><div class="theme-picker" role="group" aria-label="Room palette"><button class="theme-swatch" data-theme="night" aria-label="Use Night palette"></button><button class="theme-swatch" data-theme="dawn" aria-label="Use Dawn palette"></button><button class="theme-swatch" data-theme="berry" aria-label="Use Berry palette"></button></div></article>`;
+  return `<article class="pack" aria-labelledby="pack-title"><p class="eyebrow">Optional family pack</p><h2 id="pack-title">Add two room palettes</h2><p>The pack adds Dawn and Berry palettes plus one celebration stamp. All three games stay free.</p><p class="pack-price">US$8 once · no subscription</p><div class="pack-actions"><a class="button primary" href="${BILLING_BASE}/products/${SLUG}/checkout">Buy family pack</a></div><details class="restore"><summary>Have a license? Restore it</summary><form data-form="restore"><label for="license">License token</label><div class="form-row"><input class="license-input" id="license" name="license" autocomplete="off" required aria-describedby="license-error" /><button>Verify license</button></div><p class="field-error" id="license-error" aria-live="polite"></p></form></details><p class="tiny">Sociobot/Dodo handles checkout and refunds. See <a href="/terms" data-nav>terms</a> and <a href="/privacy" data-nav>privacy</a>.</p></article>`;
 }
 
 function roomPage(): string {
@@ -141,20 +196,80 @@ function roomPage(): string {
   </main>`;
 }
 
+function demoPage(): string {
+  if (demoLoading || !demoSample) {
+    return `<main id="main" class="demo-page"><section aria-labelledby="demo-title"><p class="eyebrow">Read-only sample</p><h1 id="demo-title">Open a sample co-op round</h1><p class="lede">Loading a populated room with two sample players…</p></section></main>`;
+  }
+  const sample = demoSample;
+  const sequence = sample.active_game.board.sequence as string[];
+  const complete = demoProgress >= sequence.length;
+  const clues = clueForSeat(sequence, 0);
+  return `<main id="main" class="demo-page">
+    <section aria-labelledby="demo-title">
+      <div class="demo-heading"><div><p class="eyebrow">Read-only sample room ${escapeHtml(sample.room_code)}</p><h1 id="demo-title">Try a sample co-op round</h1><p class="lede">Alex and Sam have finished two games. Star Signal is their current round.</p></div><div class="demo-stats" aria-label="Sample room summary"><span><strong>2</strong> players connected</span><span><strong>2</strong> rounds complete</span></div></div>
+      <div class="game-board-wrap demo-board-wrap">
+        <section class="game-board" aria-labelledby="sample-game-title"><h2 id="sample-game-title">Star Signal</h2><p class="round-message" aria-live="polite">${complete ? 'Sample round complete. Both players rebuilt the signal.' : `${demoProgress} of 6 symbols are complete. It is Alex’s turn.`}</p><div class="clue-strip" aria-label="Alex’s half of the sample signal">${clues.map((clue, index) => `<div class="clue ${clue === 'partner' ? 'partner' : ''} ${index < demoProgress ? 'done' : ''}" aria-label="Step ${index + 1}: ${clue === 'partner' ? 'Sam’s clue' : clue}">${clue === 'partner' ? 'Sam' : SYMBOLS[clue]}</div>`).join('')}</div><div class="progress-pips" aria-label="${demoProgress} of 6 symbols complete">${sequence.map((_, index) => `<span class="pip ${index < demoProgress ? 'lit' : ''}"></span>`).join('')}</div>${complete ? '<button class="primary" data-action="reset-demo">Reset sample round</button>' : '<button class="primary" data-action="demo-turn">Choose drop for Alex</button>'}</section>
+        <section class="game-aside" aria-labelledby="recent-title"><h2 id="recent-title">Recent sample rounds</h2><ul class="sample-results">${sample.recent_rounds.map((result) => `<li><strong>${escapeHtml(result.game)}</strong><span>${result.turns} turns · ${escapeHtml(result.result)}</span></li>`).join('')}</ul><p>This sample cannot open, read, or change a real room.</p></section>
+      </div>
+    </section>
+  </main>`;
+}
+
+function fallbackDemoSample(): DemoSample {
+  return {
+    workspace_id: 'offline-sample',
+    room_code: '428 615',
+    expires_at: Math.floor(Date.now() / 1000) + 86_400,
+    players: ['Alex', 'Sam'],
+    active_game: {
+      kind: 'star_signal', phase: 'playing', turn: 0, round: 3, moves: 4,
+      board: { sequence: ['leaf', 'star', 'moon', 'heart', 'drop', 'sun'], progress: 4 },
+      message: 'Four symbols match. Alex chooses the next symbol.'
+    },
+    recent_rounds: [
+      { game: 'Patchwork Pair', turns: 9, result: 'nine patches matched' },
+      { game: 'Firefly Ferry', turns: 8, result: 'firefly reached home' }
+    ]
+  };
+}
+
+async function loadDemo(): Promise<void> {
+  if (demoLoading) return;
+  demoLoading = true;
+  demoSample = null;
+  demoProgress = 4;
+  render();
+  try {
+    const response = await fetch('/api/demo');
+    if (!response.ok) throw new Error('sample unavailable');
+    demoSample = await response.json() as DemoSample;
+  } catch {
+    demoSample = fallbackDemoSample();
+    if (navigator.onLine) notice = 'The live sample could not load. A built-in sample is shown instead.';
+  } finally {
+    demoLoading = false;
+    render();
+  }
+}
+
+function notFoundPage(): string {
+  return `<main id="main" class="not-found"><section aria-labelledby="not-found-title"><p class="error-code" aria-hidden="true">404</p><p class="eyebrow">Page not found</p><h1 id="not-found-title">This page does not exist</h1><p class="lede">The link may be old or incomplete. Return home or open the sample room.</p><div class="action-row"><a class="button primary" href="/" data-nav>Return home</a><a class="button" href="/demo" data-nav>Open sample room</a></div></section></main>`;
+}
+
 function windowStatus(seat: Seat): string {
-  return `<span class="window-status ${connected[seat] ? 'online' : ''}"><i class="status-light" aria-hidden="true"></i>Window ${seat === 0 ? 'A' : 'B'}${session?.seat === seat ? ' (you)' : ''}: ${connected[seat] ? 'connected' : 'away'}</span>`;
+  return `<span class="window-status ${connected[seat] ? 'online' : ''}"><i class="status-light" aria-hidden="true"></i>Player ${seat + 1}${session?.seat === seat ? ' (you)' : ''}: ${connected[seat] ? 'connected' : 'away'}</span>`;
 }
 
 function loadingRoomMarkup(): string {
-  return `<section aria-labelledby="room-loading"><p class="eyebrow">Tuning the signal</p><h1 id="room-loading">Opening your room…</h1><p class="lede">If the connection dropped, this device will keep trying automatically.</p></section>`;
+  return `<section aria-labelledby="room-loading"><p class="eyebrow">Private room</p><h1 id="room-loading">Opening your room…</h1><p class="lede">If the connection dropped, this device will keep trying automatically.</p></section>`;
 }
 
 function lobbyMarkup(): string {
   const ready = connected[0] && connected[1];
   return `<section aria-labelledby="lobby-title">
-    <div class="room-intro"><div><p class="eyebrow">You are Window ${session?.seat === 0 ? 'A' : 'B'}</p><h1 id="lobby-title">Choose tonight’s tiny adventure.</h1><p>Either player can start. You will always take turns.</p></div><span class="waiting-signal ${ready ? 'ready' : ''}">${ready ? 'Both windows are lit' : 'Waiting for the other window'}</span></div>
+    <div class="room-intro"><div><p class="eyebrow">You are Player ${(session?.seat ?? 0) + 1}</p><h1 id="lobby-title">Choose one of three games</h1><p>Choose a game when both players connect. Each move alternates between players.</p></div><span class="waiting-signal ${ready ? 'ready' : ''}">${ready ? 'Both players are connected' : 'Waiting for the other player'}</span></div>
     <div class="game-picker">
-      ${gameCard('star_signal', '✦', 'Star Signal', 'Each window holds half the clues. Say them aloud and rebuild the six-symbol signal.')}
+      ${gameCard('star_signal', '✦', 'Star Signal', 'Each player holds half the clues. Say them aloud and rebuild the six-symbol signal.')}
       ${gameCard('patchwork', '▦', 'Patchwork Pair', 'Match the stitched edges and alternate tiles until one shared nine-patch picture appears.')}
       ${gameCard('firefly_ferry', '◆', 'Firefly Ferry', 'Window A steers sideways; Window B steers vertically. Guide one light around the river stones.')}
     </div>
@@ -174,11 +289,11 @@ function gameMarkup(): string {
   if (room.kind === 'star_signal') board = starBoard(mine);
   if (room.kind === 'patchwork') board = patchBoard(mine);
   if (room.kind === 'firefly_ferry') board = riverBoard(mine);
-  return `<section aria-labelledby="game-title"><div class="game-header"><div><p class="eyebrow">Round ${room.round} · ${room.moves} turns</p><h1 id="game-title">${title}</h1><p class="round-message" aria-live="polite">${escapeHtml(room.message)}</p></div><span class="turn-chip ${mine ? 'mine' : ''}">${mine ? 'Your move' : "Partner's move"}</span></div><div class="game-board-wrap"><div class="game-board">${board}</div><aside class="game-aside"><h2>Play aloud</h2>${instructions(room.kind)}<button class="quiet small" data-action="lobby">Choose another game</button></aside></div></section>`;
+  return `<section aria-labelledby="game-title"><div class="game-header"><div><p class="eyebrow">Round ${room.round} · ${room.moves} turns</p><h1 id="game-title">${title}</h1><p class="round-message" aria-live="polite">${escapeHtml(room.message)}</p></div><span class="turn-chip ${mine ? 'mine' : ''}">${mine ? 'Your move' : "Partner's move"}</span></div><div class="game-board-wrap"><div class="game-board">${board}</div><section class="game-aside" aria-labelledby="instructions-title"><h2 id="instructions-title">How to play</h2>${instructions(room.kind)}<button class="quiet small" data-action="lobby">Choose another game</button></section></div></section>`;
 }
 
 function instructions(kind: string): string {
-  if (kind === 'star_signal') return '<p>Read only the symbols shown in your window. Your partner has the missing ones. On your turn, choose the next symbol you agreed on.</p>';
+  if (kind === 'star_signal') return '<p>Read only the symbols shown to you. Your partner has the missing ones. Choose the next symbol on your turn.</p>';
   if (kind === 'patchwork') return '<p>The colored top stitch tells you which patch belongs in a square. Choose a color, then an empty square. A mismatch simply asks you to try again.</p>';
   return `<p>${session?.seat === 0 ? 'You move the light left or right.' : 'You move the light up or down.'} Plan the whole path together; stones block a square.</p>`;
 }
@@ -214,15 +329,15 @@ function riverBoard(mine: boolean): string {
 
 function winMarkup(): string {
   if (!room) return '';
-  return `<section class="win-panel" aria-labelledby="win-title"><div><p class="win-mark" aria-hidden="true">✦</p><p class="eyebrow">Round ${room.round} complete</p><h1 id="win-title">You did it together.</h1><p class="lede">${escapeHtml(room.message)} The room stays open, so one more round is easy.</p><div class="action-row"><button class="primary" data-action="again">Play this game again</button><button data-action="lobby">Choose another game</button></div>${unlocked ? '<p class="tiny">Family pack celebration stamp: SIGNAL KEPT ✦</p>' : ''}</div></section>`;
+  return `<section class="win-panel" aria-labelledby="win-title"><div><p class="win-mark" aria-hidden="true">✦</p><p class="eyebrow">Round ${room.round} complete</p><h1 id="win-title">You completed the round</h1><p class="lede">${escapeHtml(room.message)} The room stays open for another round.</p><div class="action-row"><button class="primary" data-action="again">Play this game again</button><button data-action="lobby">Choose another game</button></div>${unlocked ? '<p class="celebration-preview">ROUND COMPLETE ✦</p>' : ''}</div></section>`;
 }
 
 function privacyPage(): string {
-  return `<main id="main" class="legal"><p class="eyebrow">Plain-language policy</p><h1>Privacy without profiles.</h1><time datetime="2026-08-27">Updated 27 August 2026</time><p class="lede">Together Room is designed so a parent and child can play without creating an identity.</p><h2>What a room stores</h2><p>When you create a room, our server stores its six-digit code, game board and turn state, two pseudonymous device-key hashes, connection timestamps, and an expiry time. We do not ask for names, ages, messages, contacts, or location. There is no open chat and no advertising or behavioral analytics.</p><h2>How long it stays</h2><p>Room records automatically expire two hours after creation and are deleted by a regular cleanup job. A reconnect key and optional purchase license are kept in your browser’s local storage so this device can reopen the room or restore the family pack. You can clear them through your browser settings.</p><h2>Purchases</h2><p>If you buy the optional family pack, checkout is hosted by Sociobot/Dodo, the merchant of record. Together Room sends you to that service; it does not receive card details. It stores the returned license token only on this device and sends that token to Sociobot to verify it at most once per day. Their transaction records follow their own legal retention duties.</p><h2>Children and safety</h2><p>The service does not knowingly collect personal information from children. Codes are not listed or matched publicly. Families should share a room code only with the person they intend to play with.</p><h2>Contact</h2><p>For privacy requests, email <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>. Include no child’s personal details; a room code is enough for troubleshooting.</p></main>`;
+  return `<main id="main" class="legal"><p class="eyebrow">Privacy policy</p><h1>How Together Room handles data</h1><time datetime="2026-09-05">Updated 5 September 2026</time><p class="lede">A parent and child can play without creating an account.</p><h2>What a room stores</h2><p>The server stores a six-digit code, game state, two device-key hashes, connection times, and an expiry time.</p><p>We do not ask for names, ages, messages, contacts, or location.</p><p>We do not provide chat, public rooms, advertising, or behavioral analytics.</p><h2>How long room data stays</h2><p>Room records expire two hours after creation. The server removes expired rooms during regular cleanup.</p><p>Your browser stores a reconnect key only after you enter a real room. Clear site data to remove it.</p><h2>What the sample stores</h2><p>The sample uses read-only data kept in memory. It cannot read or write a real room or browser storage.</p><h2>Purchases</h2><p>Sociobot/Dodo hosts checkout as the merchant of record. Together Room does not receive card details.</p><p>A returned license stays in this browser. Together Room sends it only to Sociobot for verification, at most once each day.</p><h2>Children and safety</h2><p>Together Room does not ask children for personal details. Share a room code only with the person you intend to play with.</p><h2>Privacy requests</h2><p>Email <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>. Include no child’s personal details. A room code is enough for troubleshooting.</p></main>`;
 }
 
 function termsPage(): string {
-  return `<main id="main" class="legal"><p class="eyebrow">Fair-play terms</p><h1>Short rooms, simple terms.</h1><time datetime="2026-08-27">Updated 27 August 2026</time><p class="lede">Together Room provides a private, temporary co-op activity. A parent or guardian should supervise a child’s use.</p><h2>Using the service</h2><p>Use rooms only with someone you know. Do not attempt to guess codes, disrupt other rooms, automate requests, reverse engineer access keys, or use the service for unlawful activity. Rooms expire and availability is not guaranteed.</p><h2>Family pack</h2><p>The optional family pack costs US$8 as a one-time purchase and unlocks two palettes, celebration stamps, and surprise picks on devices where its license is restored. The three games, reconnect, accessibility, privacy, and safety features are free. Sociobot/Dodo is the merchant of record and handles payment and refunds. A refunded, expired, revoked, or wrong-product license stops unlocking extras.</p><h2>No warranty</h2><p>The service is provided “as is” without warranties to the extent allowed by law. We are not liable for indirect loss. Nothing here limits rights that cannot legally be limited, including applicable consumer rights.</p><h2>Changes and contact</h2><p>Material changes will be posted here with a new date. Questions can be sent to <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p></main>`;
+  return `<main id="main" class="legal"><p class="eyebrow">Terms of use</p><h1>Terms for using Together Room</h1><time datetime="2026-09-05">Updated 5 September 2026</time><p class="lede">Together Room provides a private, temporary co-op activity. A parent or guardian should supervise a child’s use.</p><h2>Using a room</h2><p>Use a room only with someone you know. Do not guess codes, disrupt rooms, automate requests, or misuse access keys.</p><p>Rooms expire, and service availability is not guaranteed.</p><h2>Family pack</h2><p>The optional family pack costs US$8 once. It adds Dawn and Berry palettes plus one celebration stamp.</p><p>All three games remain free.</p><p>Sociobot/Dodo handles payment and refund requests as the merchant of record.</p><p>A revoked or wrong-product license stops showing the paid extras.</p><h2>Service limits</h2><p>The service is provided “as is” where the law allows. We are not liable for indirect loss.</p><p>These terms do not limit consumer rights that the law protects.</p><h2>Changes and questions</h2><p>Material changes appear here with a new date. Email questions to <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p></main>`;
 }
 
 async function createRoom(): Promise<void> {
@@ -252,7 +367,7 @@ async function joinRoom(code: string): Promise<void> {
 function enterRoom(next: Session): void {
   session = next; room = null; connected = [false, false]; saveSession(next);
   history.replaceState({}, '', `/?room=${next.code}`);
-  render(); connectSocket();
+  render(true); connectSocket();
 }
 
 function connectSocket(): void {
@@ -270,7 +385,7 @@ function connectSocket(): void {
   });
   socket.addEventListener('close', () => {
     socket = null; connected = [false, false];
-    if (session) { setNotice(navigator.onLine ? 'Signal lost. Reconnecting automatically…' : 'You are offline. The room will reconnect when the network returns.'); scheduleReconnect(); render(); }
+    if (session) { setNotice(navigator.onLine ? 'Connection lost. Reconnecting automatically…' : 'You are offline. The room will reconnect when the network returns.'); scheduleReconnect(); render(); }
   });
   socket.addEventListener('error', () => socket?.close());
 }
@@ -282,13 +397,13 @@ function scheduleReconnect(): void {
 }
 
 function send(payload: object): void {
-  if (socket?.readyState !== WebSocket.OPEN) { setNotice('The signal is reconnecting. Your move was not sent; try again when your window is lit.'); return; }
+  if (socket?.readyState !== WebSocket.OPEN) { setNotice('The room is reconnecting. Your move was not sent. Try again when your player status says connected.'); return; }
   socket.send(JSON.stringify(payload));
 }
 
 function leaveRoom(): void {
   socket?.close(); socket = null; session = null; room = null; connected = [false, false]; notice = '';
-  history.pushState({}, '', '/'); render();
+  history.pushState({ scrollY: 0 }, '', '/'); render(true);
 }
 
 async function shareRoom(): Promise<void> {
@@ -311,11 +426,26 @@ function showFormError(id: string, message: string): void {
 
 function navigate(path: string): void {
   if (path === location.pathname) return;
-  history.pushState({}, '', path); render(); window.scrollTo({ top: 0 });
+  if (path === '/demo') {
+    clearTimeout(reconnectTimer);
+    session = null;
+    room = null;
+    connected = [false, false];
+    socket?.close();
+    socket = null;
+  }
+  history.replaceState({ ...(history.state ?? {}), scrollY: window.scrollY }, '');
+  history.pushState({ scrollY: 0 }, '', path);
+  notice = '';
+  render(true);
+  window.scrollTo({ top: 0 });
+  if (path === '/demo') void loadDemo();
+  if (path !== '/demo' && !unlocked) void initializeLicense();
 }
 
 function applyTheme(): void {
   document.body.classList.remove('theme-dawn', 'theme-berry');
+  if (location.pathname === '/demo') return;
   const theme = unlocked ? localStorage.getItem('together_theme') : 'night';
   if (theme === 'dawn' || theme === 'berry') document.body.classList.add(`theme-${theme}`);
 }
@@ -354,6 +484,10 @@ app.addEventListener('click', (event) => {
   if (!target) return;
   if (target.matches('[data-nav]')) { event.preventDefault(); navigate((target as HTMLAnchorElement).getAttribute('href') ?? '/'); return; }
   const action = target.dataset.action;
+  if (action === 'try-demo') navigate('/demo');
+  if (action === 'reset-demo') void loadDemo();
+  if (action === 'start-real') { demoSample = null; demoLoading = false; navigate('/'); }
+  if (action === 'demo-turn') { demoProgress = 6; render(); }
   if (action === 'create') void createRoom();
   if (action === 'show-join') { joinOpen = !joinOpen; render(); if (joinOpen) document.querySelector<HTMLInputElement>('#room-code')?.focus(); }
   if (action === 'leave') leaveRoom();
@@ -385,17 +519,23 @@ app.addEventListener('submit', (event) => {
   }
 });
 
-window.addEventListener('popstate', () => { if (location.pathname !== '/') { socket?.close(); socket = null; } render(); });
+window.addEventListener('popstate', (event) => {
+  if (location.pathname !== '/') { socket?.close(); socket = null; }
+  render(true);
+  window.scrollTo({ top: Number((event.state as { scrollY?: number } | null)?.scrollY ?? 0) });
+  if (location.pathname === '/demo' && !demoSample) void loadDemo();
+});
 window.addEventListener('online', () => { notice = ''; if (session) connectSocket(); render(); });
 window.addEventListener('offline', () => { setNotice('You are offline. An open room will reconnect when the network returns.'); render(); });
 
 const initialCode = normalizeRoomCode(new URL(location.href).searchParams.get('room') ?? '');
-if (initialCode.length === 6) {
+if (location.pathname === '/' && initialCode.length === 6) {
   const saved = loadSession(initialCode);
   if (saved) { session = saved; connectSocket(); }
   else { joinCode = initialCode; joinOpen = true; }
 }
 
 render();
-void initializeLicense();
+if (location.pathname === '/demo') void loadDemo();
+else void initializeLicense();
 if ('serviceWorker' in navigator && import.meta.env.PROD) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => undefined));

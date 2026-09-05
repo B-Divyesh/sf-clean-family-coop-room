@@ -1,2 +1,3 @@
 User-agent: *
 Allow: /
+Sitemap: https://clean-family-coop-room.sociobot.in/sitemap.xml

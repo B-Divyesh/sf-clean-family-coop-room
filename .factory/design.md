@@ -49,3 +49,14 @@ UI transitions last 160–240ms and use only opacity/transform. The hero signal 
 Use case: `illustration-story`. Asset type: responsive landing-page hero. Subject: two cozy empty rooms/treehouses on separate tiny floating islands, each with one square glowing window, joined by a single warm stepped beam made of chunky pixels. World: tranquil deep-night sky with a few geometric stars and subtle dither, family-safe and hopeful. Medium/materials: polished 16-bit demoscene pixel art, hard square pixels, no antialiasing, limited color count, subtle CRT-era ordered dithering. Composition: wide landscape, islands on left and right with open breathing space and an unbroken connection between. Light: warm amber windows and bridge against navy/teal night. Palette words: ink navy, deep petrol, cream, signal amber, mint, sky blue, sparing coral. Negative list: no people, no faces, no text, no letters, no numbers, no logo, no watermark, no existing game characters, no brand marks, no UI screenshot, no neon gradient, no photorealism, no blur.
 
 Provenance: generated 2026-08-27 with the factory `factory-image` model using the prompt sheet above. The accepted 1536×1024 PNG and prompt sidecar are in `assets/src/`; it was reviewed for anatomy, text artifacts, seams, symbols, brands, and palette consistency. No people are depicted; the bridge is continuous and there are no text or brand artifacts. Shipping WebP derivatives are 720×480 (39 KB) and 1200×800 (79 KB), both well below the 300 KB mobile budget. Generated imagery is disclosed in the site footer.
+
+The 1200×630 social card is a centered crop of the accepted hero. The 180×180
+touch icon is a raster export of the hand-authored app mark. Both were produced
+locally on 2026-09-05 without new source imagery.
+
+## Repair 4 interface language
+
+The visual direction remains the same, but interface labels now use literal
+player and room terms. The first screen names the remote co-op job. Route,
+privacy, pricing, demo, and error headings describe their content directly.
+The in-game titles remain because they identify the three actual games.

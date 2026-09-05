@@ -6,7 +6,7 @@ async function newPlayer(context: BrowserContext): Promise<Page> {
   return page;
 }
 
-test('two devices join, complete a Star Signal round, and reconnect', async ({ browser }) => {
+test('@claim:three-games @claim:turn-taking @claim:continued-room two devices play every game in alternating turns', async ({ browser }) => {
   const firstContext = await browser.newContext();
   const secondContext = await browser.newContext();
   const first = await newPlayer(firstContext);
@@ -14,15 +14,15 @@ test('two devices join, complete a Star Signal round, and reconnect', async ({ b
 
   await first.goto('/');
   await first.getByRole('button', { name: 'Make a room' }).click();
-  await expect(first.getByText('Waiting for the other window')).toBeVisible();
+  await expect(first.getByText('Waiting for the other player')).toBeVisible();
   const rawCode = await first.locator('.room-code').innerText();
   const code = rawCode.replace(/\D/g, '').slice(-6);
   expect(code).toHaveLength(6);
 
   await second.goto(`/?room=${code}`);
   await second.getByRole('button', { name: 'Open room' }).click();
-  await expect(second.getByText('Both windows are lit')).toBeVisible();
-  await expect(first.getByText('Both windows are lit')).toBeVisible();
+  await expect(second.getByText('Both players are connected')).toBeVisible();
+  await expect(first.getByText('Both players are connected')).toBeVisible();
 
   await first.getByRole('button', { name: 'Play Star Signal' }).click();
   await expect(second.getByRole('heading', { level: 1, name: 'Star Signal' })).toBeVisible();
@@ -32,12 +32,12 @@ test('two devices join, complete a Star Signal round, and reconnect', async ({ b
     [second, 'heart'], [first, 'drop'], [second, 'sun']
   ];
   for (const [page, symbol] of sequence) await page.getByRole('button', { name: `Choose ${symbol}` }).click();
-  await expect(first.getByRole('heading', { level: 1, name: 'You did it together.' })).toBeVisible();
-  await expect(second.getByRole('heading', { level: 1, name: 'You did it together.' })).toBeVisible();
+  await expect(first.getByRole('heading', { level: 1, name: 'You completed the round' })).toBeVisible();
+  await expect(second.getByRole('heading', { level: 1, name: 'You completed the round' })).toBeVisible();
 
   await first.reload();
-  await expect(first.getByText('Window A (you): connected')).toBeVisible();
-  await expect(first.getByRole('heading', { level: 1, name: 'You did it together.' })).toBeVisible();
+  await expect(first.getByText('Player 1 (you): connected')).toBeVisible();
+  await expect(first.getByRole('heading', { level: 1, name: 'You completed the round' })).toBeVisible();
 
   await first.getByRole('button', { name: 'Choose another game' }).click();
   await first.getByRole('button', { name: 'Play Patchwork Pair' }).click();
@@ -50,7 +50,7 @@ test('two devices join, complete a Star Signal round, and reconnect', async ({ b
     await page.getByRole('button', { name: color, exact: true }).click();
     await page.locator(`[data-patch-index="${index}"]`).click();
   }
-  await expect(second.getByRole('heading', { level: 1, name: 'You did it together.' })).toBeVisible();
+  await expect(second.getByRole('heading', { level: 1, name: 'You completed the round' })).toBeVisible();
 
   await second.getByRole('button', { name: 'Choose another game' }).click();
   await second.getByRole('button', { name: 'Play Firefly Ferry' }).click();
@@ -59,7 +59,7 @@ test('two devices join, complete a Star Signal round, and reconnect', async ({ b
     [first, 'Right'], [second, 'Up'], [first, 'Right'], [second, 'Up']
   ];
   for (const [page, direction] of route) await page.getByRole('button', { name: new RegExp(direction, 'i') }).click();
-  await expect(first.getByRole('heading', { level: 1, name: 'You did it together.' })).toBeVisible();
+  await expect(first.getByRole('heading', { level: 1, name: 'You completed the round' })).toBeVisible();
 
   await firstContext.close();
   await secondContext.close();

@@ -24,7 +24,7 @@ fn build_sha_is_baked_into_backend_and_runtime_identity() {
     assert!(DOCKERFILE.contains("ARG BUILD_SHA=dev"));
 
     let backend = DOCKERFILE
-        .split("FROM rust:1.88-bookworm AS backend")
+        .split("FROM rust:1-slim-bookworm AS backend")
         .nth(1)
         .and_then(|rest| rest.split("FROM debian:bookworm-slim AS runtime").next())
         .expect("backend stage");

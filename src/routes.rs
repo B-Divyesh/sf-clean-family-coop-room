@@ -30,18 +30,21 @@ const ROOM_RATE_WINDOW: Duration = Duration::from_secs(60);
 pub const CREATE_ROOM_LIMIT: usize = 6;
 pub const JOIN_ROOM_LIMIT: usize = 12;
 pub const SOCKET_UPGRADE_LIMIT: usize = 20;
+pub const DEMO_LIMIT: usize = 30;
 
 #[derive(Clone, Copy)]
 pub enum RoomRequestBucket {
     Create,
     Join,
     Socket,
+    Demo,
 }
 
 struct ClientRateLimits {
     create: VecDeque<Instant>,
     join: VecDeque<Instant>,
     socket: VecDeque<Instant>,
+    demo: VecDeque<Instant>,
     last_seen: Instant,
 }
 
@@ -51,6 +54,7 @@ impl ClientRateLimits {
             create: VecDeque::new(),
             join: VecDeque::new(),
             socket: VecDeque::new(),
+            demo: VecDeque::new(),
             last_seen: now,
         }
     }
@@ -124,6 +128,7 @@ impl AppState {
             RoomRequestBucket::Create => (&mut limits.create, CREATE_ROOM_LIMIT),
             RoomRequestBucket::Join => (&mut limits.join, JOIN_ROOM_LIMIT),
             RoomRequestBucket::Socket => (&mut limits.socket, SOCKET_UPGRADE_LIMIT),
+            RoomRequestBucket::Demo => (&mut limits.demo, DEMO_LIMIT),
         };
         while requests
             .front()
@@ -186,10 +191,37 @@ struct ClientEvent {
 
 pub fn api_router(state: AppState) -> Router {
     Router::new()
+        .route("/demo", get(demo_sample))
         .route("/rooms", post(create_room))
         .route("/rooms/{code}/join", post(join_room))
         .route("/rooms/{code}/socket", get(room_socket))
         .with_state(state)
+}
+
+async fn demo_sample() -> Json<Value> {
+    let workspace_id = format!("sample-{:016x}", rand::rng().random::<u64>());
+    Json(json!({
+        "workspace_id": workspace_id,
+        "room_code": "428 615",
+        "expires_at": now() + 24 * 60 * 60,
+        "players": ["Alex", "Sam"],
+        "active_game": {
+            "kind": "star_signal",
+            "phase": "playing",
+            "turn": 0,
+            "round": 3,
+            "moves": 4,
+            "board": {
+                "sequence": ["leaf", "star", "moon", "heart", "drop", "sun"],
+                "progress": 4
+            },
+            "message": "Four symbols match. Alex chooses the next symbol."
+        },
+        "recent_rounds": [
+            { "game": "Patchwork Pair", "turns": 9, "result": "nine patches matched" },
+            { "game": "Firefly Ferry", "turns": 8, "result": "firefly reached home" }
+        ]
+    }))
 }
 
 async fn create_room(State(state): State<AppState>) -> Result<Json<JoinResponse>, ApiError> {
@@ -561,5 +593,68 @@ mod tests {
         }
         assert_eq!(accepted, 1);
         assert_eq!(conflicts, 19);
+    }
+
+    // @claim:room-expiry
+    #[tokio::test]
+    async fn claim_room_expiry_rejects_join_and_cleanup_deletes_state() {
+        let name: u64 = rand::rng().random();
+        let pool = db::connect(&format!(
+            "sqlite://expiry-claim-{name}?mode=memory&cache=shared"
+        ))
+        .await
+        .unwrap();
+        let state = AppState::new(pool.clone());
+        let Json(created) = create_room(State(state.clone())).await.unwrap();
+        sqlx::query("UPDATE rooms SET expires_at = ? WHERE code = ?")
+            .bind(now() - 1)
+            .bind(&created.code)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let expired = join_room(Path(created.code.clone()), State(state))
+            .await
+            .unwrap_err();
+        assert_eq!(expired.0, StatusCode::GONE);
+        remove_expired(&pool).await;
+        let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rooms WHERE code = ?")
+            .bind(created.code)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining, 0);
+    }
+
+    // @claim:data-minimization
+    #[tokio::test]
+    async fn claim_room_storage_uses_only_expected_fields_and_hashes_device_keys() {
+        let name: u64 = rand::rng().random();
+        let pool = db::connect(&format!(
+            "sqlite://data-claim-{name}?mode=memory&cache=shared"
+        ))
+        .await
+        .unwrap();
+        let state = AppState::new(pool.clone());
+        let Json(created) = create_room(State(state)).await.unwrap();
+        let stored: (String, String, i64, i64) = sqlx::query_as(
+            "SELECT code, game_json, created_at, expires_at FROM rooms WHERE code = ?",
+        )
+        .bind(&created.code)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(stored.0, created.code);
+        assert!(serde_json::from_str::<RoomGame>(&stored.1).is_ok());
+        assert_eq!(stored.3 - stored.2, ROOM_LIFETIME_SECONDS);
+
+        let stored_hash: String =
+            sqlx::query_scalar("SELECT token_hash FROM participants WHERE room_code = ?")
+                .bind(&created.code)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_ne!(stored_hash, created.token);
+        assert_eq!(stored_hash, token_hash(&created.token));
     }
 }

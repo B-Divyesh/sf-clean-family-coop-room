@@ -9,6 +9,7 @@
     "build": "vite build",
     "test": "vitest run && cargo test",
     "test:e2e": "playwright test",
+    "test:claims": "playwright test --project=chromium",
     "check": "tsc --noEmit && cargo clippy --all-targets -- -D warnings"
   },
   "devDependencies": {

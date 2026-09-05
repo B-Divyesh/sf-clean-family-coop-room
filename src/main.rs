@@ -2,7 +2,12 @@ mod db;
 mod game;
 mod routes;
 
-use std::{env, net::SocketAddr, path::PathBuf, time::Duration};
+use std::{
+    env,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use axum::{
     extract::{Request, State},
@@ -36,9 +41,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer().json())
         .init();
 
-    let database_url =
-        env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://together-room.db?mode=rwc".into());
-    let frontend_dir = PathBuf::from(env::var("FRONTEND_DIR").unwrap_or_else(|_| "dist".into()));
+    let (database_url, database_source) = match env::var("DATABASE_URL") {
+        Ok(value) => (value, "supplied"),
+        Err(_) if Path::new("/data").is_dir() => (
+            "sqlite:///data/together-room.db?mode=rwc".into(),
+            "generated durable default",
+        ),
+        Err(_) => (
+            "sqlite://together-room.db?mode=rwc".into(),
+            "generated local default",
+        ),
+    };
+    let (frontend_dir, frontend_source) = match env::var("FRONTEND_DIR") {
+        Ok(value) => (PathBuf::from(value), "supplied"),
+        Err(_) => (PathBuf::from("dist"), "generated default"),
+    };
+    tracing::info!(
+        database_config = database_source,
+        frontend_config = frontend_source,
+        "configuration ready"
+    );
     let pool = db::connect(&database_url).await?;
     let state = AppState::new(pool.clone())
         .with_trusted_proxy_headers(env::var("TRUST_PROXY_HEADERS").as_deref() == Ok("1"));
@@ -82,8 +104,10 @@ fn build_app(state: AppState, frontend_dir: PathBuf) -> Router {
         .layer(SetResponseHeaderLayer::if_not_present(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))
         .layer(SetResponseHeaderLayer::if_not_present(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY")))
         .layer(SetResponseHeaderLayer::if_not_present(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer")))
+        .layer(SetResponseHeaderLayer::if_not_present(header::STRICT_TRANSPORT_SECURITY, HeaderValue::from_static("max-age=63072000; includeSubDomains")))
         .layer(SetResponseHeaderLayer::if_not_present(header::CONTENT_SECURITY_POLICY, HeaderValue::from_static("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self' wss: ws: https://api.sociobot.in; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://api.sociobot.in")))
         .layer(CompressionLayer::new())
+        .layer(middleware::from_fn(mark_unknown_navigation))
         .layer(middleware::from_fn(cache_headers))
         .layer(CatchPanicLayer::new())
         .layer(TraceLayer::new_for_http().make_span_with(|request: &Request| {
@@ -130,6 +154,8 @@ async fn rate_limit_room_requests(
 fn room_request_bucket(method: &Method, path: &str) -> Option<routes::RoomRequestBucket> {
     if method == Method::POST && path == "/api/rooms" {
         Some(routes::RoomRequestBucket::Create)
+    } else if method == Method::GET && path == "/api/demo" {
+        Some(routes::RoomRequestBucket::Demo)
     } else if method == Method::POST && path.starts_with("/api/rooms/") && path.ends_with("/join") {
         Some(routes::RoomRequestBucket::Join)
     } else if method == Method::GET && path.starts_with("/api/rooms/") && path.ends_with("/socket")
@@ -138,6 +164,24 @@ fn room_request_bucket(method: &Method, path: &str) -> Option<routes::RoomReques
     } else {
         None
     }
+}
+
+async fn mark_unknown_navigation(request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_owned();
+    let should_be_not_found = request.method() == Method::GET
+        && !matches!(path.as_str(), "/" | "/demo" | "/privacy" | "/terms")
+        && !path.starts_with("/api/")
+        && path != "/health";
+    let mut response = next.run(request).await;
+    let is_html = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.starts_with("text/html"));
+    if should_be_not_found && is_html && response.status().is_success() {
+        *response.status_mut() = StatusCode::NOT_FOUND;
+    }
+    response
 }
 
 async fn cache_headers(request: Request, next: Next) -> Response {
@@ -220,8 +264,9 @@ mod tests {
             .unwrap()
     }
 
+    // @claim:rate-limits
     #[tokio::test]
-    async fn room_create_join_and_socket_attempts_are_rate_limited_per_client() {
+    async fn claim_rate_limits_return_retry_after_for_every_room_boundary() {
         for (method, path, attempts) in [
             (Method::POST, "/api/rooms", routes::CREATE_ROOM_LIMIT),
             (
