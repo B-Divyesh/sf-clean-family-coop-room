@@ -14,6 +14,13 @@ test('landing page has no serious accessibility violations or console errors', a
   expect(errors).toEqual([]);
 });
 
+test('populated demo has valid progress semantics and no serious accessibility violations', async ({ page }) => {
+  await page.goto('/demo');
+  await expect(page.getByRole('progressbar', { name: '4 of 6 symbols complete' })).toHaveAttribute('aria-valuenow', '4');
+  const results = await new AxeBuilder({ page: page as never }).analyze();
+  expect(results.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact ?? ''))).toEqual([]);
+});
+
 test('privacy and terms are reachable without a network form', async ({ page }) => {
   await page.goto('/privacy');
   await expect(page).toHaveTitle('Privacy — Together Room');
