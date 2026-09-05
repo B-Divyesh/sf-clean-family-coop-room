@@ -61,16 +61,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         frontend_config = frontend_source,
         "configuration ready"
     );
+    let deferred_database = db::requires_deferred_initialization(&database_url);
     let pool = db::connect(&database_url).await?;
-    let state = AppState::new(pool.clone())
-        .with_trusted_proxy_headers(env::var("TRUST_PROXY_HEADERS").as_deref() == Ok("1"));
-    let app = build_app(state, frontend_dir);
+    let app_state = AppState::new(pool.clone())
+        .with_trusted_proxy_headers(env::var("TRUST_PROXY_HEADERS").as_deref() == Ok("1"))
+        .with_database_ready(!deferred_database);
+    let app = build_app(app_state.clone(), frontend_dir);
 
+    if deferred_database {
+        let startup_pool = pool.clone();
+        let startup_state = app_state.clone();
+        tokio::spawn(async move {
+            match db::initialize_durable(&startup_pool).await {
+                Ok(()) => {
+                    startup_state.set_database_ready();
+                    tracing::info!("durable SQLite is ready");
+                }
+                Err(error) => tracing::error!(%error, "durable SQLite could not be initialized"),
+            }
+        });
+    }
+
+    let maintenance_state = app_state.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(600));
         loop {
             interval.tick().await;
-            routes::remove_expired(&pool).await;
+            if maintenance_state.database_is_ready() {
+                routes::remove_expired(&pool).await;
+            }
         }
     });
 
@@ -93,8 +112,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn build_app(state: AppState, frontend_dir: PathBuf) -> Router {
     let index = frontend_dir.join("index.html");
     let static_files = ServeDir::new(frontend_dir).fallback(ServeFile::new(index));
+    let health_state = state.clone();
     Router::new()
-        .route("/health", get(|| async { Json(json!({ "status": "ok", "build": build_identity() })) }))
+        .route(
+            "/health",
+            get(move || {
+                let health_state = health_state.clone();
+                async move {
+                    let status = if health_state.database_is_ready() {
+                        "ok"
+                    } else {
+                        "starting"
+                    };
+                    Json(json!({ "status": status, "build": build_identity() }))
+                }
+            }),
+        )
         .nest("/api", routes::api_router(state.clone()))
         .fallback_service(static_files)
         // Keep common response/security layers outside this short-circuit so 429s

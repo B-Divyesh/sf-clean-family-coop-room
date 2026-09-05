@@ -1,7 +1,10 @@
 use std::{
     collections::{HashMap, VecDeque},
     net::IpAddr,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -68,6 +71,7 @@ pub struct AppState {
     mutation_lock: Arc<Mutex<()>>,
     request_limits: Arc<Mutex<HashMap<String, ClientRateLimits>>>,
     trust_proxy_headers: bool,
+    database_ready: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -79,12 +83,39 @@ impl AppState {
             mutation_lock: Arc::new(Mutex::new(())),
             request_limits: Arc::new(Mutex::new(HashMap::new())),
             trust_proxy_headers: false,
+            database_ready: Arc::new(AtomicBool::new(true)),
         }
     }
 
     pub fn with_trusted_proxy_headers(mut self, trust_proxy_headers: bool) -> Self {
         self.trust_proxy_headers = trust_proxy_headers;
         self
+    }
+
+    pub fn with_database_ready(self, ready: bool) -> Self {
+        self.database_ready.store(ready, Ordering::Release);
+        self
+    }
+
+    pub fn set_database_ready(&self) {
+        self.database_ready.store(true, Ordering::Release);
+    }
+
+    pub fn database_is_ready(&self) -> bool {
+        self.database_ready.load(Ordering::Acquire)
+    }
+
+    async fn wait_for_database(&self) -> Result<(), ApiError> {
+        for _ in 0..150 {
+            if self.database_is_ready() {
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        Err(ApiError(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "The room store is starting. Wait a moment and try again.".into(),
+        ))
     }
 
     pub fn client_identity(
@@ -225,6 +256,7 @@ async fn demo_sample() -> Json<Value> {
 }
 
 async fn create_room(State(state): State<AppState>) -> Result<Json<JoinResponse>, ApiError> {
+    state.wait_for_database().await?;
     let now = now();
     let game_json = serde_json::to_string(&RoomGame::default()).map_err(internal)?;
     for _ in 0..20 {
@@ -264,6 +296,7 @@ async fn join_room(
     Path(raw_code): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<JoinResponse>, ApiError> {
+    state.wait_for_database().await?;
     let code = normalize_code(&raw_code)?;
     let now = now();
     let token = fresh_token();
@@ -316,6 +349,7 @@ async fn room_socket(
     State(state): State<AppState>,
     ws: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
+    state.wait_for_database().await?;
     let code = normalize_code(&raw_code)?;
     if query.token.len() > 128 {
         return Err(ApiError(

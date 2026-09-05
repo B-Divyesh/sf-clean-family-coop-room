@@ -10,7 +10,38 @@ pub async fn connect(url: &str) -> Result<SqlitePool, sqlx::Error> {
     // for its single-replica Azure Files mount, where WAL shared memory is not
     // supported. This is an optional override; a bare container still starts.
     let delete_journal = std::env::var("SQLITE_JOURNAL_MODE").as_deref() == Ok("delete");
+    if requires_deferred_initialization(url) {
+        let options = connection_options(url, delete_journal)?;
+        return Ok(SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_lazy_with(options));
+    }
     connect_with_journal(url, delete_journal).await
+}
+
+pub fn requires_deferred_initialization(url: &str) -> bool {
+    url.starts_with("sqlite:///data/")
+}
+
+pub async fn initialize_durable(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    for attempt in 1..=60 {
+        match initialize_durable_once(pool).await {
+            Ok(()) => return Ok(()),
+            Err(error) if is_retryable_startup_error(&error) && attempt < 60 => {
+                tracing::warn!(attempt, %error, "durable SQLite is waiting for the outgoing replica");
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("the durable initialization retry loop always returns")
+}
+
+async fn initialize_durable_once(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    sqlx::query("PRAGMA journal_mode=DELETE")
+        .execute(pool)
+        .await?;
+    initialize_schema(pool).await
 }
 
 async fn connect_with_journal(url: &str, delete_journal: bool) -> Result<SqlitePool, sqlx::Error> {
@@ -41,27 +72,35 @@ async fn connect_once(
     delete_journal: bool,
     max_connections: u32,
 ) -> Result<SqlitePool, sqlx::Error> {
-    let options = SqliteConnectOptions::from_str(url)?
-        .busy_timeout(Duration::from_secs(5))
-        .foreign_keys(true);
-    // DELETE is SQLite's durable default. Do not issue PRAGMA journal_mode on
-    // an Azure Files replacement startup: the outgoing replica can hold a
-    // harmless read connection that makes that mode-setting PRAGMA fail with
-    // SQLITE_BUSY. WAL still needs to be selected explicitly on local disks.
-    let options = if delete_journal {
-        options
-    } else {
-        options.journal_mode(SqliteJournalMode::Wal)
-    };
+    let options = connection_options(url, delete_journal)?;
     let pool = SqlitePoolOptions::new()
         .max_connections(max_connections)
         .connect_with(options)
         .await?;
+    initialize_schema(&pool).await?;
+    Ok(pool)
+}
+
+fn connection_options(
+    url: &str,
+    delete_journal: bool,
+) -> Result<SqliteConnectOptions, sqlx::Error> {
+    let options = SqliteConnectOptions::from_str(url)?
+        .busy_timeout(Duration::from_secs(5))
+        .foreign_keys(true);
+    Ok(if delete_journal {
+        options
+    } else {
+        options.journal_mode(SqliteJournalMode::Wal)
+    })
+}
+
+async fn initialize_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let schema_ready: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'index')
          AND name IN ('rooms', 'participants', 'rooms_expiry')",
     )
-    .fetch_one(&pool)
+    .fetch_one(pool)
     .await?;
     // Avoid schema-write locks during an overlapping single-replica rollout.
     // A current database has all three objects, so the incoming process opens
@@ -75,7 +114,7 @@ async fn connect_once(
                 expires_at INTEGER NOT NULL
             )",
         )
-        .execute(&pool)
+        .execute(pool)
         .await?;
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS participants (
@@ -86,13 +125,13 @@ async fn connect_once(
                 PRIMARY KEY (room_code, seat)
             )",
         )
-        .execute(&pool)
+        .execute(pool)
         .await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS rooms_expiry ON rooms(expires_at)")
-            .execute(&pool)
+            .execute(pool)
             .await?;
     }
-    Ok(pool)
+    Ok(())
 }
 
 fn is_retryable_startup_error(error: &sqlx::Error) -> bool {

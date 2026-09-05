@@ -36,7 +36,8 @@ COPY --from=frontend /build/dist ./dist
 ENV PORT=8080 \
     BUILD_SHA=${BUILD_SHA} \
     FRONTEND_DIR=/app/dist \
-    DATABASE_URL=sqlite:///data/together-room.db?mode=rwc \
+    DATABASE_URL="sqlite:///data/together-room.db?mode=rwc&vfs=unix-dotfile" \
+    SQLITE_JOURNAL_MODE=delete \
     TRUST_PROXY_HEADERS=1 \
     RUST_LOG=together_room=info,tower_http=info
 USER together
