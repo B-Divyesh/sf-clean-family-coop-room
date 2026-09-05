@@ -1,5 +1,29 @@
 # Together Room — build handoff
 
+## Review 1 — 2026-09-05
+
+**FAIL** for implementation candidate
+`fe26aa4e33b339506e323d6a40d3ec5275708319` and documentation commit
+`3c5be9708ce7ddf469bc33370c2987575585276a` at
+<https://clean-family-coop-room.sociobot.in>. Full evidence is in
+`.factory/review-1.md`.
+
+The current live core is reliable: fresh desktop and phone contexts completed
+all three games, reconnect worked, five additional create→join pairs passed,
+the shared live allowance returned 429 with `Retry-After`, local restart
+persistence and API boundaries passed, live artifacts match the candidate, and
+Lighthouse scored 100/100/100/100. Earlier split-state, limiter, join-race,
+checkout, and reflow defects are resolved.
+
+Release acceptance still has 12 findings and 30 untested public claim groups.
+The product has no one-click isolated sample, `.factory/demo.md`, or
+`.factory/claims.json`; the paid pack advertises an unimplemented surprise-pick
+feature; plain-word, route-title/focus, metadata, 404, sitemap, and global
+navigation requirements are incomplete. Three phone links remain under 44 px
+wide, HSTS remains absent, the unlocked paid view has a moderate axe landmark
+finding, and the documented Docker commands need an undeclared prerequisite.
+No product code or live configuration was changed in this review.
+
 ## Independent verification 3 — 2026-08-28
 
 **FAIL** for candidate `fe26aa4e33b339506e323d6a40d3ec5275708319`
