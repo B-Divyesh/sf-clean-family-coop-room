@@ -17,6 +17,29 @@ the corresponding claim record, and README wording. It does not change the
 release binary. This handoff is also report-only, so no newer product image is
 required.
 
+## Independent verification 4 — 2026-09-05
+
+Verdict: **PASS**. The independent verifier reviewed implementation
+`d2d88307ee42c31265236bacb4e33a3750f3edf3`; the documentation/report SHA is
+`e2b6f489f6bcc05e8af3bec7f257a76282c23442`. Live `/health` reports the latter
+source SHA and `status: ok`; changes after the implementation are test-only or
+report-only and do not change product behaviour.
+
+From a clean documented setup, `npm test`, `npm run check`,
+`cargo fmt --all -- --check`, `git diff --check`, production build, full
+browser suite (39 passed, 1 intentional phone-only skip), and all 16
+individual claim commands passed. Fresh live desktop and phone browsers
+confirmed the first screen, isolated/resettable sample, two-device joining,
+reload reconnect, every game, invalid-code recovery, legal routes, 404,
+offline sample, accessibility, and first-party privacy boundary. Live rate
+limiting allowed six creates then returned 429 with `Retry-After: 60`;
+`/health` was healthy and checkout redirected to Sociobot/Dodo without a
+purchase attempt.
+
+Full evidence and prior-finding dispositions are in
+`.factory/verification-4.md`; external QA artifacts are under
+`/work/.evidence/`. There are no known product gaps from this verification.
+
 ### Review 1 disposition
 
 All 12 findings are resolved.
