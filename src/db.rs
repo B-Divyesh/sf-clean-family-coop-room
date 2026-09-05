@@ -145,8 +145,9 @@ fn is_retryable_startup_error(error: &sqlx::Error) -> bool {
 mod tests {
     use super::*;
 
+    // @claim:restart-persistence
     #[tokio::test]
-    async fn delete_journal_startup_survives_overlapping_replacements() {
+    async fn claim_room_state_survives_overlapping_replacements_and_restart() {
         let path = std::env::temp_dir().join(format!(
             "together-room-startup-{}.db",
             rand::random::<u64>()
@@ -165,7 +166,29 @@ mod tests {
                 .unwrap(),
             "delete"
         );
-        drop((first, second));
+        sqlx::query(
+            "INSERT INTO rooms(code, game_json, created_at, expires_at) VALUES(?, ?, ?, ?)",
+        )
+        .bind("482615")
+        .bind(r#"{"phase":"lobby"}"#)
+        .bind(1_i64)
+        .bind(7_201_i64)
+        .execute(&first)
+        .await
+        .unwrap();
+        first.close().await;
+        second.close().await;
+
+        let reopened = connect_with_journal(&url, true)
+            .await
+            .expect("the restarted process reopens the room database");
+        let game_json: String =
+            sqlx::query_scalar("SELECT game_json FROM rooms WHERE code = '482615'")
+                .fetch_one(&reopened)
+                .await
+                .expect("the room remains after every original pool closes");
+        assert_eq!(game_json, r#"{"phase":"lobby"}"#);
+        reopened.close().await;
         let _ = std::fs::remove_file(path);
     }
 }

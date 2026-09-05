@@ -35,6 +35,13 @@
     "sandbox": "two fresh browser contexts and a clean local test database; make a move, reload, and assert the saved progress"
   },
   {
+    "id": "restart-persistence",
+    "claim": "A real room stays available after the server and SQLite connection restart.",
+    "where": "README deployment notes",
+    "test": "cargo test claim_room_state_survives_overlapping_replacements_and_restart",
+    "sandbox": "isolated temporary SQLite file; write a room while replacement pools overlap, close every pool, reopen the file, and read the same state"
+  },
+  {
     "id": "continued-room",
     "claim": "A completed room stays open for another game or round.",
     "where": "round result",

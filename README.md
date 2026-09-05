@@ -15,9 +15,9 @@ The three games are:
 - **Patchwork Pair** — place a shared nine-tile color pattern.
 - **Firefly Ferry** — guide one light with controls split between both players.
 
-Reloading reconnects a device to its room and saved turn. Real room data lives
-in SQLite and expires after two hours. The welcome page and sample reopen
-offline after the first visit.
+Reloading reconnects a device to its room and saved turn. A real room stays
+available after a server restart and expires after two hours. The welcome page
+and sample reopen offline after the first visit.
 
 The optional family pack costs US$8 once. It adds Dawn and Berry palettes plus
 one celebration stamp. All three games remain free. Checkout and license
