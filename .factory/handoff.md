@@ -1,5 +1,52 @@
 # Together Room — build handoff
 
+## Independent review 2 — 2026-09-05
+
+Verdict: **PASS — 0 findings; 0 untested claims**.
+
+- Implementation candidate: `d2d88307ee42c31265236bacb4e33a3750f3edf3`.
+- Documentation source reviewed: `912e6239bb4144443837dc9ed8f8bb0250975638`.
+- Live build source: `e2b6f489f6bcc05e8af3bec7f257a76282c23442`.
+- Live URL: <https://clean-family-coop-room.sociobot.in>.
+
+No product code, infrastructure, billing state, or live configuration changed.
+The SHA distinction is intentional: `d3f0d6e` adds only a `#[cfg(test)]`
+restart proof and claim documentation, while `e2b6f48` and `912e623` are
+report-only. A build using the live build identity matched every shipped
+frontend asset byte-for-byte.
+
+Fresh desktop and phone browsers confirmed the before-scroll job, audience,
+and sample action. The populated Alex/Sam sample completed, reset, retained its
+persistent label, and left a planted real-data sentinel unchanged while making
+only `GET /api/demo` requests. Separate live devices completed all three games,
+reloaded into the same state, recovered from direct network loss, displayed the
+licensed completion stamp, and started round 2.
+
+All 16 exact claim commands passed individually. `npm test`, production build,
+TypeScript/clippy, fmt, audits, diff check, release build, and the full browser
+suite passed; Playwright reported 39 passes and one intentional desktop skip of
+a phone-only geometry test. Live and local boundary checks covered 400, 401,
+404, 409, 413, 429/`Retry-After`, trusted-forwarding behavior, room isolation,
+and restart persistence. A 500-request local health smoke returned 500/500.
+
+Factory URL verification passed with no normal-load console errors. Axe found
+no violations on home, sample, legal, 404, licensed, Night, Dawn, or Berry
+views. Keyboard focus, route focus/back-forward behavior, phone targets, 200%
+reflow, reduced motion, offline sample reload, service-worker update, links,
+metadata, legal pages, and the deliberate designed 404 all passed. Lighthouse
+13.4.1 mobile scored 100/100/100/100 with 1.20 s LCP, 69.5 ms TBT, and zero
+layout shift.
+
+Live health is 200/`ok`. Six fresh creates were allowed and the seventh returned
+429 with `Retry-After: 60`; spoofed forwarding prefixes did not reset the
+bucket. The release binary started with only `PORT`, identified the candidate,
+and retained a room across a full stop/start in local SQLite. The product
+checkout returned 303 to hosted Sociobot/Dodo; no payment was made.
+
+Full evidence and every prior-finding disposition are in
+`.factory/review-2.md`. Screenshots and machine evidence are under
+`/work/.evidence/review-2/`. There are no known product gaps from this review.
+
 ## Repair 4 — 2026-09-05
 
 Work order: `clean-family-coop-room-repair-4`.
