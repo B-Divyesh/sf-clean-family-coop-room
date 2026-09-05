@@ -57,30 +57,41 @@ async fn connect_once(
         .max_connections(max_connections)
         .connect_with(options)
         .await?;
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS rooms (
-            code TEXT PRIMARY KEY,
-            game_json TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            expires_at INTEGER NOT NULL
-        )",
+    let schema_ready: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'index')
+         AND name IN ('rooms', 'participants', 'rooms_expiry')",
     )
-    .execute(&pool)
+    .fetch_one(&pool)
     .await?;
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS participants (
-            room_code TEXT NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
-            seat INTEGER NOT NULL CHECK (seat IN (0, 1)),
-            token_hash TEXT NOT NULL UNIQUE,
-            last_seen INTEGER NOT NULL,
-            PRIMARY KEY (room_code, seat)
-        )",
-    )
-    .execute(&pool)
-    .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS rooms_expiry ON rooms(expires_at)")
+    // Avoid schema-write locks during an overlapping single-replica rollout.
+    // A current database has all three objects, so the incoming process opens
+    // it read-only until it begins serving normal requests.
+    if schema_ready != 3 {
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS rooms (
+                code TEXT PRIMARY KEY,
+                game_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            )",
+        )
         .execute(&pool)
         .await?;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS participants (
+                room_code TEXT NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
+                seat INTEGER NOT NULL CHECK (seat IN (0, 1)),
+                token_hash TEXT NOT NULL UNIQUE,
+                last_seen INTEGER NOT NULL,
+                PRIMARY KEY (room_code, seat)
+            )",
+        )
+        .execute(&pool)
+        .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS rooms_expiry ON rooms(expires_at)")
+            .execute(&pool)
+            .await?;
+    }
     Ok(pool)
 }
 
