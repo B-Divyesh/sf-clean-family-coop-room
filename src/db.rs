@@ -41,15 +41,18 @@ async fn connect_once(
     delete_journal: bool,
     max_connections: u32,
 ) -> Result<SqlitePool, sqlx::Error> {
-    let journal_mode = if delete_journal {
-        SqliteJournalMode::Delete
-    } else {
-        SqliteJournalMode::Wal
-    };
     let options = SqliteConnectOptions::from_str(url)?
         .busy_timeout(Duration::from_secs(5))
-        .foreign_keys(true)
-        .journal_mode(journal_mode);
+        .foreign_keys(true);
+    // DELETE is SQLite's durable default. Do not issue PRAGMA journal_mode on
+    // an Azure Files replacement startup: the outgoing replica can hold a
+    // harmless read connection that makes that mode-setting PRAGMA fail with
+    // SQLITE_BUSY. WAL still needs to be selected explicitly on local disks.
+    let options = if delete_journal {
+        options
+    } else {
+        options.journal_mode(SqliteJournalMode::Wal)
+    };
     let pool = SqlitePoolOptions::new()
         .max_connections(max_connections)
         .connect_with(options)
