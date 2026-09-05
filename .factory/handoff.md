@@ -1,5 +1,124 @@
 # Together Room — build handoff
 
+## Repair 4 — 2026-09-05
+
+Work order: `clean-family-coop-room-repair-4`.
+
+- Base review commit: `2b1af2cb22e2a56fc60816b7fe41339d652c7244`.
+- Deployed implementation: `d2d88307ee42c31265236bacb4e33a3750f3edf3`.
+- Verification/documentation source before this handoff:
+  `d3f0d6ed0f886c1a46509a0b3564e494f68ee391`.
+- Live revision: `sf-clean-family-coop-room--0000017`, image
+  `sociobotregistry.azurecr.io/sf-clean-family-coop-room:d2d88307ee42`.
+- Live `/health`: exact implementation SHA with `status: ok`.
+
+The later `d3f0d6e` commit adds only a `#[cfg(test)]` persistence assertion,
+the corresponding claim record, and README wording. It does not change the
+release binary. This handoff is also report-only, so no newer product image is
+required.
+
+### Review 1 disposition
+
+All 12 findings are resolved.
+
+| Finding | Disposition |
+| --- | --- |
+| F01 demo missing | `/demo` and the first-screen sample action load Alex and Sam's populated, read-only in-memory room. The persistent banner has Reset demo and Start for real. A storage sentinel and request log prove the sample cannot read or change real room data. `.factory/demo.md` documents the boundary. |
+| F02 claims missing | `.factory/claims.json` contains 16 retained claims. Every listed command passed individually. Earlier subjective or unprovable language was removed; related privacy statements were grouped behind observable network, storage, and database tests. |
+| F03 paid feature false | Surprise picks and plural stamps were removed. The US$8 family pack now truthfully provides Dawn and Berry palettes plus one visible celebration stamp. Valid, inactive, cached, restore, and checkout-boundary states have browser tests. |
+| F04 plain words | The first h1 is `Play three remote co-op games`; the next sentence names a parent and child, and the sample is the first action. Three account/expiry/price facts fit before the 390×844 fold. Mood headings were replaced and `.factory/copy-audit.md` has no sentence over 22 words or banned term. |
+| F05 route state | Home, Demo, Privacy, Terms, room, and 404 states set distinct titles. SPA navigation and back/forward focus the new h1 and announce it. |
+| F06 metadata | Canonical, description, Open Graph, Twitter card, original 1200×630 social image, SVG favicon, and 180 px touch icon ship. |
+| F07 404 | Unknown navigation returns HTTP 404 with a designed recovery page and links home and to the sample. |
+| F08 structure | XML sitemap, robots file, Demo/Privacy header links, descriptive footer, legal links, Param Factory link, and build id ship on every page. |
+| F09 touch targets | Reported pack and footer links now measure at least 44×44 px. The 195 px / 200% reflow regression has no horizontal overflow. |
+| F10 HSTS | HTTPS responses send `Strict-Transport-Security: max-age=63072000; includeSubDomains`. |
+| F11 paid landmark | The paid panel is an `article`, not a misplaced complementary landmark. Axe passes both locked and licensed views. |
+| F12 Docker prerequisite | README lists Docker as optional and scopes Docker-only commands. The metadata-free Docker contract is tested, and both final ACR builds passed. |
+
+The original 30 untested claim groups were either retained with outcome tests
+or removed/narrowed. In particular, the unmeasured ten-minute duration and
+subjective no-lesson language are gone. Keyboard, touch, reduced-motion, and
+200% reflow remain verified accessibility behavior without marketing claims.
+Refund revocation and no-paid-dependency absolutes are gone. Restart
+persistence is retained as claim 16 and now writes a room to a temporary
+SQLite file, closes every connection, reopens the file, and reads the same
+state.
+
+Earlier backend findings also remain closed: a fresh live desktop and phone
+joined one room, completed all three games, and reconnected after reload;
+caller-supplied forwarding prefixes cannot choose limiter buckets; concurrent
+joins produce one winner rather than a 500; and the hosted purchase endpoint
+returns 303. The final live allowance returned six 200 responses followed by
+429 with `Retry-After`.
+
+### What changed
+
+- Added the isolated sample endpoint and page, offline sample fallback,
+  persistent sample controls, and demo documentation.
+- Rewrote the landing, legal, pricing, error, and navigation copy in plain
+  words while preserving the three games and account-free room flow.
+- Added route metadata/focus, discovery assets, sitemap, styled 404, HSTS,
+  complete global navigation, corrected touch targets, and responsive reflow.
+- Made paid extras real and observable: Dawn and Berry palettes and one
+  celebration stamp. Billing stays on the Sociobot/Dodo hosted flow.
+- Added health-gated, retrying SQLite initialization for safe one-replica
+  rolling replacements on the durable Azure Files mount. `/health` can report
+  `starting` during handover and reports `ok` only when room storage is ready.
+- Added semantic progress bars to the sample and Star Signal after the live
+  axe pass identified an invalid ARIA label on a generic container.
+- Added original social/touch assets and recorded their provenance in
+  `.factory/design.md`.
+
+### Clean verification
+
+- `npm ci`: 59 packages; zero vulnerabilities.
+- `npm test`: 3 Vitest, 14 Rust unit/router, and 3 deployment-contract tests
+  passed.
+- `npm run check`, `cargo fmt --all -- --check`, and `git diff --check` passed.
+- `npm run build`: `dist/` produced; initial JavaScript 28.80 kB (10.27 kB
+  gzip), CSS 17.80 kB (4.83 kB gzip), no web-font transfer, and 39 kB mobile
+  hero.
+- `npm run test:e2e`: 39 passed across desktop and 390×844 phone; the desktop
+  copy of one phone-only geometry check was intentionally skipped.
+- All 16 commands in `.factory/claims.json` passed individually from the
+  reset test database.
+- The release binary compiled with the implementation SHA, started with only
+  `PORT`, returned that SHA from `/health`, and kept a created room across a
+  stop/start cycle.
+- Factory `verify-url.sh` passed live in 570 ms: correct title/lang, one h1,
+  main landmark, no missing alt text, no unlabeled buttons, and no browser
+  errors.
+- Live Lighthouse 13.4.1 mobile: 100 performance, 100 accessibility, 100 best
+  practices, 100 SEO; FCP/LCP 902 ms, TBT 0 ms, CLS 0. A navigation-only lab
+  run does not report INP.
+- Fresh live desktop and phone contexts checked the first screen, sample
+  completion/reset/isolation, legal pages, route titles, 404, keyboard focus,
+  reduced motion, service-worker update, and offline sample reload. Landing
+  and sample had no serious/critical axe findings or console errors.
+- Live two-device play completed Star Signal, Patchwork Pair, and Firefly
+  Ferry with alternating turns, then reloaded into the completed room.
+
+### Deployment and remaining notes
+
+The fleet wrapper preserved the existing `sf-clean-family-coop-room-data`
+share, `/data` mount, environment, probes, and one-replica bounds. Revision 17
+is healthy and has 100% traffic. SQLite uses DELETE journal mode and
+`unix-dotfile` locking on `/data`. The replacement exposes health before
+opening the shared database, then retries initialization until the outgoing
+revision releases its file lock.
+
+The catalog description is 87 characters before its newline, starts with a
+verb, and was copied to `/work/.evidence/catalog-description.txt`.
+
+No real payment or refund was placed. The production checkout redirect is
+live, while licensed UI and invalid/cached verdicts use recorded provider
+responses in tests, as required. The external Sociobot/Dodo checkout remains
+the payment dependency. Docker was unavailable locally, but the final source
+built successfully in ACR through the factory's metadata-free path. No AI
+feature was added because this bounded family game does not benefit from one.
+There are no known release-blocking product gaps.
+
 ## Review 1 — 2026-09-05
 
 **FAIL** for implementation candidate
